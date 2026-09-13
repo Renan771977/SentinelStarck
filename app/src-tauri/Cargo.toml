@@ -1,0 +1,43 @@
+# Declara este crate como workspace próprio.
+#
+# Ele fica DENTRO da pasta do workspace da raiz, mas não é membro dele. Sem
+# esta tabela vazia, o Cargo assume que ele pertence ao workspace de cima e
+# falha com "current package believes it's in a workspace when it's not".
+[workspace]
+
+[package]
+name = "sentinelstack-app"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "sentinelstack_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# default-features = false é obrigatório: o Cargo unifica features em todo o
+# build, e pedir as features padrão da core reativaria o pnet mesmo quando
+# você compila com --no-default-features.
+sentinel-core = { path = "../../crates/core", default-features = false }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# ATENÇÃO: [features] fica no FIM do arquivo.
+#
+# TOML atribui cada chave à última tabela declarada. Um [features] no meio de
+# [dependencies] engole todas as dependências seguintes e o Cargo reclama
+# "invalid type: map, expected a sequence", porque feature tem que ser lista.
+[features]
+default = ["raw-socket"]
+# Repassa para a core. Build sem isto abre o app em modo limitado, sem exigir
+# o SDK do Npcap no Windows.
+raw-socket = ["sentinel-core/raw-socket"]

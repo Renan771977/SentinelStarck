@@ -1,0 +1,40 @@
+[package]
+name = "sentinel-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+
+rusqlite = { version = "0.32", features = ["bundled"] }
+# Opcional de propósito.
+#
+# No Windows o pnet linka contra Packet.lib e wpcap.lib, que só existem no SDK
+# do Npcap. Com ele obrigatório, quem não tem o SDK não consegue nem rodar os
+# testes. Assim, `cargo test --no-default-features` funciona em qualquer
+# máquina e em CI, sem libpcap e sem Npcap.
+pnet = { version = "0.35", optional = true }
+ipnet = "2"
+# Listagem de interfaces sem libpcap: getifaddrs no Unix, GetAdaptersAddresses
+# no Windows. Precisa funcionar em modo limitado, senão a tela não tem
+# interface para oferecer e o botão de escanear fica inerte.
+if-addrs = "0.13"
+# io-util traz AsyncReadExt e AsyncWriteExt, usados na coleta de banner e
+# nas sondas. signal é para o Ctrl+C do CLI.
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "io-util", "signal"] }
+hickory-resolver = "0.24"
+toml = "0.8"
+regex = "1"
+
+
+[features]
+default = ["raw-socket"]
+# Isola tudo que exige socket raw. Build sem este recurso compila em ambiente
+# sem libpcap e funciona em modo limitado, o que é útil em CI.
+raw-socket = ["pnet"]

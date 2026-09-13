@@ -1,0 +1,42 @@
+/*
+ * Fontes locais, não CDN.
+ *
+ * O produto promete não falar com serviço externo, e promessa desse tipo
+ * precisa valer de verdade. Baixe Inter e JetBrains Mono e coloque em
+ * src/assets/fonts/.
+ */
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/Inter-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/JetBrainsMono-Variable.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: #090C12;
+  color: #E8ECF4;
+  font-family: Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Sem seleção de texto acidental ao clicar em linha de tabela. */
+button { user-select: none; }
+
+/* Barra de rolagem discreta, coerente com o tema escuro. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0F141D; }
+::-webkit-scrollbar-thumb { background: #222C3C; border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #2C3850; }

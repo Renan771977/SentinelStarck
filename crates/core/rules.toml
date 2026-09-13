@@ -1,0 +1,1113 @@
+
+# ==========================================================================
+#  SentinelStack — catálogo de regras de risco
+#
+#  Embutido no binário via include_str!. Carregado e validado na inicialização.
+#  Toda regra precisa de `why` e `fix` preenchidos. Se não dá para escrever
+#  os dois em poucas linhas, a regra não deveria existir.
+#
+#  severity : critical | high | medium | low | info
+#  confidence:
+#    confirmed → o serviço respondeu de forma que prova a condição
+#    likely    → forte indício, mas não verificado de ponta a ponta
+#    possible  → inferido de banner ou porta, pode ser falso positivo
+# ==========================================================================
+
+[meta]
+schema = 1
+version = "0.1.0"
+locale = "pt-BR"
+
+# --------------------------------------------------------------------------
+#  Modificadores de severidade
+#
+#  A severidade final = base_severity deslocada pela soma dos modificadores
+#  aplicáveis. Cada +1 sobe um nível, cada -1 desce. Limitado entre info e
+#  critical. É o que faz "RDP no gateway" e "RDP no desktop da contabilidade"
+#  serem coisas diferentes usando a mesma regra.
+# --------------------------------------------------------------------------
+
+[[modifier]]
+when = "device.has_public_ip"
+delta = 2
+reason = "Endereço fora das faixas privadas. Pode estar acessível da internet."
+
+[[modifier]]
+when = "device.kind in ['router','firewall']"
+delta = 1
+reason = "Comprometer a borda expõe a rede inteira."
+
+[[modifier]]
+when = "device.kind == 'server'"
+delta = 1
+reason = "Servidores concentram dado e serviço compartilhado."
+
+[[modifier]]
+when = "device.kind == 'workstation' && rule.category == 'windows'"
+delta = -1
+reason = "Serviços Windows são esperados em estação de trabalho."
+
+[[modifier]]
+when = "finding.accepted"
+delta = -2
+reason = "Risco aceito pelo usuário com justificativa registrada."
+
+[[modifier]]
+when = "device.in_management_vlan"
+delta = -1
+reason = "VLAN de gerência com acesso restrito reduz o alcance do problema."
+
+# --------------------------------------------------------------------------
+#  Fim de suporte
+#
+#  Datas de calendário, não correlação com CVE. Ver nota no fim do arquivo
+#  sobre por que banner de versão NÃO vira CVE.
+#  Confira as datas antes de cada release: elas mudam.
+# --------------------------------------------------------------------------
+
+[eol]
+"Windows XP"                = 2014-04-08
+"Windows 7"                 = 2020-01-14
+"Windows 8.1"               = 2023-01-10
+"Windows 10"                = 2025-10-14
+"Windows Server 2008"       = 2020-01-14
+"Windows Server 2008 R2"    = 2020-01-14
+"Windows Server 2012"       = 2023-10-10
+"Windows Server 2012 R2"    = 2023-10-10
+"Windows Server 2016"       = 2027-01-12
+"CentOS 6"                  = 2020-11-30
+"CentOS 8"                  = 2021-12-31
+"CentOS 7"                  = 2024-06-30
+"Ubuntu 16.04"              = 2021-04-30
+"Ubuntu 18.04"              = 2023-05-31
+"Ubuntu 20.04"              = 2025-05-31
+"Debian 9"                  = 2022-06-30
+"Debian 10"                 = 2024-06-30
+
+# ==========================================================================
+#  PROTOCOLOS EM TEXTO CLARO
+# ==========================================================================
+
+[[rule]]
+id = "NET-001"
+title = "Telnet ativo"
+category = "cleartext"
+base_severity = "high"
+confidence = "confirmed"
+match = { ports = [23], expect_banner = true }
+why = """
+O Telnet transmite usuário, senha e todo o conteúdo da sessão sem
+criptografia. Qualquer máquina na mesma rede consegue capturar as
+credenciais de administração do equipamento.
+"""
+fix = """
+Desative o Telnet e use SSH no lugar. Em switch e roteador isso costuma
+ser uma linha de configuração. Se o equipamento não suportar SSH, ele
+precisa ficar em VLAN de gerência isolada até ser substituído.
+"""
+refs = ["CWE-319"]
+
+[[rule]]
+id = "NET-002"
+title = "FTP sem criptografia"
+category = "cleartext"
+base_severity = "medium"
+confidence = "confirmed"
+match = { ports = [21], banner_not = "(?i)(ftps|tls|ssl)" }
+why = """
+O FTP envia credenciais e arquivos em texto claro. Além da captura de
+senha, o conteúdo transferido pode ser lido ou alterado no caminho.
+"""
+fix = """
+Migre para SFTP (sobre SSH) ou FTPS. Se o servidor for usado apenas para
+transferência interna automatizada, restrinja por firewall às origens que
+realmente precisam enquanto a migração não acontece.
+"""
+refs = ["CWE-319"]
+
+[[rule]]
+id = "NET-003"
+title = "Serviços r-* ativos (rsh, rlogin, rexec)"
+category = "cleartext"
+base_severity = "high"
+confidence = "confirmed"
+match = { ports = [512, 513, 514] }
+why = """
+Esses serviços são anteriores ao SSH, não criptografam nada e autenticam
+por confiança de host, o que permite acesso sem senha a partir de uma
+máquina considerada confiável.
+"""
+fix = """
+Desinstale os pacotes rsh-server e rlogin e remova as entradas
+correspondentes do inetd ou xinetd. Use SSH com chave no lugar.
+"""
+refs = ["CWE-319"]
+
+[[rule]]
+id = "NET-004"
+title = "TFTP ativo"
+category = "cleartext"
+base_severity = "medium"
+confidence = "likely"
+match = { udp_ports = [69] }
+why = """
+O TFTP não tem autenticação nenhuma. Qualquer um na rede pode baixar
+arquivos do diretório servido, que em equipamento de rede costuma conter
+backup de configuração com senhas.
+"""
+fix = """
+Desative o TFTP quando não estiver em uso ativo de provisionamento. Se for
+necessário para carregar firmware, ligue apenas durante a janela de
+manutenção e desligue em seguida.
+"""
+refs = ["CWE-306"]
+
+[[rule]]
+id = "NET-005"
+title = "Painel administrativo em HTTP puro"
+category = "cleartext"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "http_admin_panel_no_tls" }
+why = """
+A interface de administração responde sem TLS. Usuário e senha trafegam em
+texto claro e podem ser capturados por qualquer máquina na mesma rede.
+"""
+fix = """
+Ative HTTPS se o equipamento suportar, mesmo com certificado autoassinado.
+Quando não suportar, mova o equipamento para uma VLAN de gerência acessível
+apenas a partir das estações de administração.
+"""
+refs = ["CWE-319"]
+
+[[rule]]
+id = "NET-006"
+title = "LDAP sem TLS"
+category = "cleartext"
+base_severity = "high"
+confidence = "likely"
+match = { ports = [389], custom = "ldap_no_starttls" }
+why = """
+Consultas ao diretório e o bind de autenticação trafegam sem criptografia.
+Isso expõe estrutura organizacional e, no bind simples, a senha do usuário.
+"""
+fix = """
+Habilite LDAPS na porta 636 ou exija STARTTLS na 389, e configure os
+clientes para recusar conexão sem TLS.
+"""
+refs = ["CWE-319"]
+
+[[rule]]
+id = "NET-007"
+title = "Correio sem STARTTLS"
+category = "cleartext"
+base_severity = "medium"
+confidence = "confirmed"
+match = { ports = [25, 110, 143], custom = "smtp_pop_imap_no_starttls" }
+why = """
+O servidor de correio aceita sessão sem criptografia. Senha e conteúdo das
+mensagens podem ser lidos por quem estiver no caminho da conexão.
+"""
+fix = """
+Exija STARTTLS nas portas 110, 143 e 587, ou use as portas dedicadas
+993 e 995. Desabilite autenticação em conexão não criptografada.
+"""
+refs = ["CWE-319"]
+
+[[rule]]
+id = "NET-008"
+title = "X11 escutando na rede"
+category = "cleartext"
+base_severity = "high"
+confidence = "confirmed"
+match = { ports = [6000, 6001] }
+why = """
+O servidor gráfico aceita conexão pela rede. Dependendo do controle de
+acesso, isso permite capturar tela e teclado da sessão do usuário.
+"""
+fix = """
+Rode o X apenas em socket local com a opção -nolisten tcp. Se precisar de
+janela remota, use encaminhamento X11 sobre SSH.
+"""
+refs = ["CWE-284"]
+
+[[rule]]
+id = "NET-009"
+title = "VNC exposto"
+category = "cleartext"
+base_severity = "high"
+confidence = "confirmed"
+match = { ports = [5900, 5901, 5902, 5903] }
+why = """
+O VNC dá controle total da área de trabalho. Muitas implementações usam
+senha curta, não criptografam a sessão e não limitam tentativas de acesso.
+"""
+fix = """
+Restrinja o acesso por firewall e coloque a sessão dentro de um túnel SSH
+ou VPN. Prefira ferramentas de acesso remoto com TLS e autenticação forte.
+"""
+refs = ["CWE-319", "CWE-307"]
+
+# ==========================================================================
+#  SNMP
+# ==========================================================================
+
+[[rule]]
+id = "SNMP-001"
+title = "SNMP com community padrão public"
+category = "snmp"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "snmp_default_community_read" }
+why = """
+O equipamento respondeu consultas usando a community padrão. Qualquer
+pessoa na rede consegue ler configuração, interfaces, tabela ARP e a
+topologia inteira a partir daqui.
+"""
+fix = """
+Troque a community por um valor aleatório longo, restrinja por lista de
+acesso aos IPs de gerência e, onde o equipamento suportar, migre para
+SNMPv3 com autenticação e criptografia.
+"""
+refs = ["CWE-1188"]
+
+[[rule]]
+id = "SNMP-002"
+title = "SNMP com community de escrita padrão"
+category = "snmp"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "snmp_default_community_write" }
+why = """
+A community de escrita padrão está ativa. Isso permite reconfigurar o
+equipamento remotamente: derrubar interfaces, alterar rotas ou, em alguns
+modelos, baixar e substituir a configuração inteira.
+"""
+fix = """
+Desative a community de escrita se ela não for usada. Se for necessária,
+troque por valor aleatório e restrinja por lista de acesso. Prefira
+SNMPv3 com authPriv.
+"""
+refs = ["CWE-1188", "CWE-284"]
+
+[[rule]]
+id = "SNMP-003"
+title = "SNMPv1 ou v2c em uso"
+category = "snmp"
+base_severity = "medium"
+confidence = "confirmed"
+match = { custom = "snmp_version_legacy" }
+why = """
+Essas versões enviam a community em texto claro e não têm criptografia.
+Mesmo com community forte, ela é capturável na rede.
+"""
+fix = """
+Migre para SNMPv3 com authPriv nos equipamentos que suportarem. Nos que
+não suportarem, mantenha o SNMP restrito à VLAN de gerência.
+"""
+refs = ["CWE-319"]
+
+# ==========================================================================
+#  BANCOS DE DADOS E CACHE
+# ==========================================================================
+
+[[rule]]
+id = "DB-001"
+title = "Redis sem autenticação"
+category = "database"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "redis_noauth" }
+why = """
+O Redis respondeu a comandos sem exigir senha. Qualquer pessoa na rede pode
+ler, alterar ou apagar todos os dados, e em muitas configurações também
+gravar arquivo no disco do servidor.
+"""
+fix = """
+Defina requirepass no redis.conf, mantenha protected-mode ligado e
+restrinja o bind a 127.0.0.1 se o acesso for apenas local. Reinicie o
+serviço depois da alteração.
+"""
+refs = ["CWE-306"]
+
+[[rule]]
+id = "DB-002"
+title = "MongoDB sem autenticação"
+category = "database"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "mongo_noauth" }
+why = """
+O banco aceitou conexão e listou informações sem pedir credencial. Todo o
+conteúdo pode ser lido, alterado ou apagado por qualquer máquina na rede.
+"""
+fix = """
+Ative security.authorization no mongod.conf, crie um usuário
+administrativo e reinicie. Restrinja o bindIp às interfaces necessárias.
+"""
+refs = ["CWE-306"]
+
+[[rule]]
+id = "DB-003"
+title = "Elasticsearch sem autenticação"
+category = "database"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "elastic_noauth" }
+why = """
+A API respondeu sem credencial. É possível ler todos os índices, apagar
+dados e, em versões antigas, executar operações que levam à execução de
+código no servidor.
+"""
+fix = """
+Ative a segurança nativa (xpack.security.enabled), defina senha para os
+usuários internos e restrinja o network.host. Coloque atrás de proxy com
+autenticação se precisar de acesso externo.
+"""
+refs = ["CWE-306"]
+
+[[rule]]
+id = "DB-004"
+title = "Memcached exposto na rede"
+category = "database"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "memcached_reachable" }
+why = """
+O Memcached não tem autenticação por design. Além do acesso ao conteúdo em
+cache, o serviço em UDP é usado para amplificação em ataques de negação de
+serviço contra terceiros.
+"""
+fix = """
+Configure o listen em 127.0.0.1, desative o protocolo UDP com -U 0 e
+restrinja por firewall.
+"""
+refs = ["CWE-306"]
+
+[[rule]]
+id = "DB-005"
+title = "MySQL ou MariaDB acessível na rede"
+category = "database"
+base_severity = "high"
+confidence = "possible"
+match = { ports = [3306] }
+why = """
+A porta do banco responde na rede. Isso não prova acesso indevido, mas
+amplia a superfície: qualquer máquina comprometida na rede pode tentar
+força bruta ou explorar falhas do serviço.
+"""
+fix = """
+Restrinja o bind-address ao necessário e libere por firewall apenas os
+servidores de aplicação. Bancos que atendem só a aplicação local devem
+escutar em 127.0.0.1.
+"""
+refs = ["CWE-284"]
+
+[[rule]]
+id = "DB-006"
+title = "PostgreSQL acessível na rede"
+category = "database"
+base_severity = "high"
+confidence = "possible"
+match = { ports = [5432] }
+why = """
+A porta responde na rede. Combinado com regra permissiva no pg_hba.conf,
+isso pode permitir conexão a partir de qualquer máquina interna.
+"""
+fix = """
+Revise listen_addresses e o pg_hba.conf, restringindo host e método de
+autenticação. Libere por firewall apenas as origens necessárias.
+"""
+refs = ["CWE-284"]
+
+[[rule]]
+id = "DB-007"
+title = "SQL Server acessível na rede"
+category = "database"
+base_severity = "high"
+confidence = "possible"
+match = { ports = [1433] }
+why = """
+A instância responde na rede. A conta sa é alvo constante de força bruta,
+e versões antigas têm falhas conhecidas de escalada.
+"""
+fix = """
+Restrinja por firewall às origens necessárias, desative a conta sa ou
+renomeie-a, e exija criptografia na conexão.
+"""
+refs = ["CWE-284"]
+
+# ==========================================================================
+#  WINDOWS E SMB
+# ==========================================================================
+
+[[rule]]
+id = "WIN-001"
+title = "SMBv1 habilitado"
+category = "windows"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "smb_v1_negotiated" }
+why = """
+O servidor aceitou negociação em SMBv1, protocolo obsoleto e vetor do
+WannaCry e do NotPetya. Não existe configuração que o torne seguro.
+"""
+fix = """
+Remova o recurso SMB 1.0/CIFS pelo Gerenciador do Servidor ou pelo
+PowerShell e reinicie. Verifique antes se algum equipamento antigo, como
+scanner de rede ou controlador industrial, depende dele.
+"""
+refs = ["CWE-477"]
+
+[[rule]]
+id = "WIN-002"
+title = "NetBIOS ativo"
+category = "windows"
+base_severity = "medium"
+confidence = "confirmed"
+match = { ports = [137, 138, 139] }
+why = """
+O NetBIOS expõe nomes e sessões da máquina e viabiliza ataques de
+envenenamento de resolução de nome, usados para capturar credencial de
+usuário na rede local.
+"""
+fix = """
+Desative NetBIOS sobre TCP/IP nas propriedades do adaptador quando a rede
+já usa DNS. Desative também LLMNR e mDNS por política de grupo.
+"""
+refs = ["CWE-284"]
+
+[[rule]]
+id = "WIN-003"
+title = "RDP acessível na rede"
+category = "windows"
+base_severity = "medium"
+confidence = "likely"
+match = { ports = [3389] }
+why = """
+A porta 3389 está aberta. O acesso remoto por RDP é alvo comum de força
+bruta e de exploração de falhas do próprio serviço, e é o ponto de entrada
+mais frequente em casos de ransomware em empresa pequena.
+"""
+fix = """
+Restrinja por firewall às origens que realmente precisam, exija
+autenticação em nível de rede (NLA) e ative bloqueio de conta após
+tentativas falhas. Nunca exponha RDP diretamente à internet.
+"""
+refs = ["CWE-307"]
+
+[[rule]]
+id = "WIN-004"
+title = "WinRM em HTTP"
+category = "windows"
+base_severity = "medium"
+confidence = "confirmed"
+match = { ports = [5985] }
+why = """
+O serviço de gerenciamento remoto está na porta sem TLS. Dependendo do
+método de autenticação configurado, credenciais podem trafegar de forma
+recuperável.
+"""
+fix = """
+Configure o listener HTTPS na porta 5986 com certificado e desative o
+listener HTTP. Restrinja as origens permitidas por firewall.
+"""
+refs = ["CWE-319"]
+
+[[rule]]
+id = "WIN-005"
+title = "Compartilhamento SMB com acesso anônimo"
+category = "windows"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "smb_null_session" }
+why = """
+Foi possível listar compartilhamentos sem credencial. Além do conteúdo
+exposto, sessão nula revela usuários e política de senha do domínio.
+"""
+fix = """
+Desative o acesso anônimo por política de segurança local e revise as
+permissões de cada compartilhamento, removendo o grupo Todos.
+"""
+refs = ["CWE-306"]
+
+# ==========================================================================
+#  FIM DE SUPORTE
+# ==========================================================================
+
+[[rule]]
+id = "EOL-001"
+title = "Windows desktop fora de suporte"
+category = "eol"
+base_severity = "critical"
+confidence = "likely"
+match = { custom = "eol_lookup", family = "windows_client" }
+why = """
+Esta versão do Windows não recebe mais atualizações de segurança. Falhas
+descobertas depois da data de fim de suporte não têm correção disponível,
+e o número delas só cresce com o tempo.
+"""
+fix = """
+Planeje a atualização ou a substituição da máquina. Enquanto isso, remova
+o acesso administrativo do usuário, restrinja a máquina por firewall e
+não use esse equipamento para acesso a sistema financeiro.
+"""
+refs = ["CWE-1104"]
+
+[[rule]]
+id = "EOL-002"
+title = "Windows Server fora de suporte"
+category = "eol"
+base_severity = "critical"
+confidence = "likely"
+match = { custom = "eol_lookup", family = "windows_server" }
+why = """
+Esta versão do Windows Server deixou de receber atualizações de segurança.
+Como servidores concentram dados e serviços compartilhados, o impacto de
+uma falha sem correção é proporcionalmente maior.
+"""
+fix = """
+Planeje a migração para uma versão suportada. Enquanto isso, isole o
+servidor em VLAN própria, restrinja o acesso ao mínimo necessário e
+confirme que o backup está sendo testado.
+"""
+refs = ["CWE-1104"]
+
+[[rule]]
+id = "EOL-003"
+title = "Distribuição RHEL ou CentOS fora de suporte"
+category = "eol"
+base_severity = "high"
+confidence = "likely"
+match = { custom = "eol_lookup", family = "rhel" }
+why = """
+A distribuição não recebe mais atualizações de segurança do fornecedor.
+O CentOS 7, muito comum em servidor brasileiro, encerrou em junho de 2024.
+"""
+fix = """
+Migre para uma distribuição suportada, como Rocky Linux, AlmaLinux ou RHEL
+com assinatura. Se a migração for demorada, avalie um contrato de suporte
+estendido em vez de deixar o servidor sem atualização.
+"""
+refs = ["CWE-1104"]
+
+[[rule]]
+id = "EOL-004"
+title = "Ubuntu ou Debian fora de suporte"
+category = "eol"
+base_severity = "high"
+confidence = "likely"
+match = { custom = "eol_lookup", family = "debian" }
+why = """
+A versão saiu do período de suporte padrão. Pacotes deixam de receber
+correção de segurança, incluindo kernel e bibliotecas de base.
+"""
+fix = """
+Atualize para a versão LTS atual. Em Ubuntu, o programa de manutenção
+estendida (ESM) cobre parte dos pacotes por mais alguns anos e pode servir
+de ponte durante a migração.
+"""
+refs = ["CWE-1104"]
+
+[[rule]]
+id = "EOL-005"
+title = "Firmware de equipamento de rede antigo"
+category = "eol"
+base_severity = "medium"
+confidence = "possible"
+match = { custom = "firmware_age_heuristic" }
+why = """
+A versão de firmware identificada é significativamente anterior à mais
+recente conhecida para este fabricante. Roteador e switch sem atualização
+acumulam falhas de acesso remoto.
+"""
+fix = """
+Consulte o site do fabricante e aplique a atualização em janela de
+manutenção, com backup da configuração feito antes. Se o modelo não recebe
+mais firmware, planeje a substituição.
+"""
+refs = ["CWE-1104"]
+
+# ==========================================================================
+#  TLS E CERTIFICADOS
+# ==========================================================================
+
+[[rule]]
+id = "TLS-001"
+title = "Certificado expirado"
+category = "tls"
+base_severity = "medium"
+confidence = "confirmed"
+match = { custom = "cert_expired" }
+why = """
+O certificado do serviço já venceu. Além do aviso no navegador, isso treina
+os usuários a ignorar alerta de segurança, o que facilita ataque de
+interceptação real.
+"""
+fix = """
+Renove o certificado e configure renovação automática quando possível.
+Marque no calendário o vencimento dos que ainda forem manuais.
+"""
+refs = ["CWE-324"]
+
+[[rule]]
+id = "TLS-002"
+title = "Certificado vence em menos de 30 dias"
+category = "tls"
+base_severity = "low"
+confidence = "confirmed"
+match = { custom = "cert_expiring_soon", days = 30 }
+why = """
+O certificado está próximo do vencimento. Expiração em serviço de produção
+costuma virar indisponibilidade fora do horário comercial.
+"""
+fix = """
+Renove agora e valide a renovação automática, se houver.
+"""
+refs = []
+
+[[rule]]
+id = "TLS-003"
+title = "TLS 1.0 ou 1.1 aceito"
+category = "tls"
+base_severity = "medium"
+confidence = "confirmed"
+match = { custom = "tls_legacy_version" }
+why = """
+Essas versões têm falhas conhecidas de protocolo e foram formalmente
+depreciadas. Aceitá-las permite que um atacante force a negociação para
+a versão mais fraca.
+"""
+fix = """
+Configure o serviço para aceitar apenas TLS 1.2 e 1.3. Verifique antes se
+algum sistema legado depende das versões antigas.
+"""
+refs = ["CWE-327"]
+
+[[rule]]
+id = "TLS-004"
+title = "Chave RSA menor que 2048 bits"
+category = "tls"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "cert_weak_key" }
+why = """
+Chaves de 1024 bits ou menos são consideradas quebráveis e não são mais
+aceitas por autoridade certificadora nem por navegador atual.
+"""
+fix = """
+Gere uma chave nova de pelo menos 2048 bits, ou use curva elíptica, e
+emita um certificado novo.
+"""
+refs = ["CWE-326"]
+
+[[rule]]
+id = "TLS-005"
+title = "Certificado autoassinado"
+category = "tls"
+base_severity = "low"
+confidence = "confirmed"
+match = { custom = "cert_self_signed" }
+why = """
+O certificado não foi emitido por autoridade confiável. Em rede interna
+isso é comum e aceitável, mas impede distinguir o serviço legítimo de uma
+tentativa de interceptação.
+"""
+fix = """
+Emita o certificado por uma CA interna e distribua o certificado raiz nas
+estações por política de grupo. Em serviço exposto, use uma CA pública.
+"""
+refs = ["CWE-295"]
+
+# ==========================================================================
+#  HIGIENE E ANOMALIA DE REDE
+#
+#  Esta seção não tem equivalente em scanner comum e é onde a ferramenta
+#  mais se diferencia. Tudo aqui vem de estado observado ao longo do tempo,
+#  não de porta aberta.
+# ==========================================================================
+
+[[rule]]
+id = "HYG-001"
+title = "IP duplicado na rede"
+category = "hygiene"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "arp_conflicting_mac" }
+why = """
+Dois endereços MAC diferentes responderam pelo mesmo IP. Isso causa queda
+intermitente e imprevisível nas duas máquinas, e é praticamente impossível
+de diagnosticar sem ferramenta.
+"""
+fix = """
+Identifique os dois equipamentos pelo fabricante do MAC. Normalmente é uma
+máquina com IP fixo dentro da faixa distribuída por DHCP. Corrija o IP fixo
+ou reserve o endereço no servidor DHCP.
+"""
+refs = []
+
+[[rule]]
+id = "HYG-002"
+title = "Servidor DHCP não autorizado"
+category = "hygiene"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "rogue_dhcp_offer" }
+why = """
+Um dispositivo fora da lista conhecida respondeu a um pedido de DHCP. Ele
+pode distribuir IP, gateway e DNS errados para as máquinas da rede,
+causando queda geral ou desviando o tráfego para passar por ele.
+"""
+fix = """
+Localize o equipamento pela porta do switch e desconecte. Costuma ser um
+roteador doméstico plugado na porta LAN por engano. Ative DHCP snooping no
+switch para bloquear o problema na origem.
+"""
+refs = ["CWE-350"]
+
+[[rule]]
+id = "HYG-003"
+title = "Mais de um gateway anunciado"
+category = "hygiene"
+base_severity = "medium"
+confidence = "likely"
+match = { custom = "multiple_gateways" }
+why = """
+Foram observados anúncios de gateway a partir de mais de um dispositivo.
+Isso leva a roteamento imprevisível e pode indicar equipamento mal
+configurado ou tentativa de desvio de tráfego.
+"""
+fix = """
+Confirme qual é o gateway legítimo e desative o roteamento nos demais.
+"""
+refs = []
+
+[[rule]]
+id = "HYG-004"
+title = "Dispositivo novo na rede"
+category = "hygiene"
+base_severity = "info"
+confidence = "confirmed"
+match = { custom = "device_first_seen" }
+why = """
+Este dispositivo não aparecia nas varreduras anteriores.
+"""
+fix = """
+Confirme se é conhecido. Se for, dê um nome a ele para que saia desta
+lista e passe a fazer parte do inventário.
+"""
+refs = []
+
+[[rule]]
+id = "HYG-005"
+title = "Dispositivo novo fora do horário comercial"
+category = "hygiene"
+base_severity = "medium"
+confidence = "confirmed"
+match = { custom = "device_first_seen_offhours" }
+why = """
+O dispositivo apareceu pela primeira vez fora da janela de expediente
+configurada. Equipamento conectado à rede quando não há ninguém no
+escritório merece verificação.
+"""
+fix = """
+Verifique a origem. Se não for reconhecido, localize a porta do switch
+pelo MAC e desconecte até confirmar de quem é.
+"""
+refs = []
+
+[[rule]]
+id = "HYG-006"
+title = "Porta de switch com erros crescentes"
+category = "hygiene"
+base_severity = "medium"
+confidence = "confirmed"
+match = { custom = "snmp_interface_errors" }
+why = """
+Os contadores de erro da interface estão subindo. A causa quase sempre é
+cabo, conector ou transceiver com defeito, e o sintoma percebido pelo
+usuário é lentidão intermitente sem explicação.
+"""
+fix = """
+Troque o cabo da porta indicada e acompanhe o contador por algumas horas.
+Se persistir, teste em outra porta do switch para isolar o problema.
+"""
+refs = []
+
+[[rule]]
+id = "HYG-007"
+title = "Porta de switch saturada"
+category = "hygiene"
+base_severity = "low"
+confidence = "confirmed"
+match = { custom = "snmp_interface_saturation", threshold_pct = 80 }
+why = """
+A utilização da interface está próxima da capacidade de forma sustentada.
+Isso se manifesta como lentidão geral para quem depende dessa porta.
+"""
+fix = """
+Identifique o que gera o tráfego. Se for uplink entre switches, avalie
+agregação de link ou porta de maior velocidade.
+"""
+refs = []
+
+[[rule]]
+id = "HYG-008"
+title = "UPnP com redirecionamento de porta ativo"
+category = "hygiene"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "upnp_igd_portmap" }
+why = """
+O roteador tem regras de encaminhamento criadas automaticamente via UPnP.
+Serviços internos podem estar acessíveis a partir da internet sem que
+ninguém tenha configurado isso conscientemente.
+"""
+fix = """
+Revise as regras ativas, remova as que não reconhecer e desative o UPnP no
+roteador. Crie encaminhamento manualmente apenas quando necessário.
+"""
+refs = ["CWE-284"]
+
+[[rule]]
+id = "HYG-009"
+title = "Perda de pacote sustentada"
+category = "hygiene"
+base_severity = "high"
+confidence = "confirmed"
+match = { custom = "probe_packet_loss", threshold_pct = 2, window_min = 10 }
+why = """
+Parte dos pacotes não está chegando ao destino de forma consistente. Perda
+acima de 1% já degrada voz e videoconferência de forma perceptível.
+"""
+fix = """
+Se a perda for para o gateway, o problema é interno: cabo, switch ou
+saturação. Se for só para destinos externos, é o link ou o provedor, e a
+medição serve de evidência ao abrir o chamado.
+"""
+refs = []
+
+[[rule]]
+id = "HYG-010"
+title = "Jitter alto"
+category = "hygiene"
+base_severity = "medium"
+confidence = "confirmed"
+match = { custom = "probe_jitter", threshold_ms = 30 }
+why = """
+A variação de latência está alta. É isso que causa voz cortada e vídeo
+travando, mesmo quando a latência média parece boa e a velocidade do link
+está normal.
+"""
+fix = """
+Verifique saturação de uplink e a configuração de QoS. Tráfego de backup
+ou sincronização em nuvem no horário de expediente é causa frequente.
+"""
+refs = []
+
+# ==========================================================================
+#  IOT, CÂMERAS E IMPRESSORAS
+# ==========================================================================
+
+[[rule]]
+id = "IOT-001"
+title = "Câmera com painel acessível na rede geral"
+category = "iot"
+base_severity = "medium"
+confidence = "likely"
+match = { custom = "camera_web_reachable" }
+why = """
+A interface da câmera responde na mesma rede das estações de trabalho.
+Câmeras costumam ter firmware desatualizado e credencial fraca, e são
+ponto de entrada comum para alcançar o resto da rede.
+"""
+fix = """
+Mova as câmeras para VLAN dedicada, sem rota para a rede corporativa,
+liberando apenas o acesso do gravador e da estação de monitoramento.
+"""
+refs = ["CWE-284"]
+
+[[rule]]
+id = "IOT-002"
+title = "Dispositivo IoT fora de VLAN segregada"
+category = "iot"
+base_severity = "low"
+confidence = "likely"
+match = { custom = "iot_in_corporate_vlan" }
+why = """
+O dispositivo está na mesma rede das estações. Se comprometido, serve de
+ponto de partida para alcançar máquinas com dado sensível.
+"""
+fix = """
+Crie uma VLAN para dispositivos não gerenciados e aplique regra de
+firewall entre ela e a rede corporativa.
+"""
+refs = ["CWE-1188"]
+
+[[rule]]
+id = "IOT-003"
+title = "Impressora com painel sem senha"
+category = "iot"
+base_severity = "medium"
+confidence = "likely"
+match = { custom = "printer_admin_no_auth" }
+why = """
+O painel administrativo abriu sem pedir autenticação. É possível alterar
+configuração, ler o histórico de trabalhos e usar a impressora como ponto
+de apoio dentro da rede.
+"""
+fix = """
+Defina senha de administrador no painel e restrinja o acesso por IP quando
+o modelo permitir. Desative protocolos não usados, como FTP e Telnet, que
+muitos modelos trazem ligados de fábrica.
+"""
+refs = ["CWE-306"]
+
+[[rule]]
+id = "IOT-004"
+title = "Fabricante com histórico de firmware inseguro"
+category = "iot"
+base_severity = "low"
+confidence = "possible"
+match = { vendor_in = ["Hikvision", "Dahua", "Foscam", "TP-Link"], kinds = ["camera", "iot"] }
+why = """
+Equipamentos deste fabricante aparecem com frequência em falhas de acesso
+remoto e credencial embutida. Isso não significa que este aparelho esteja
+comprometido, mas justifica isolamento e atenção ao firmware.
+"""
+fix = """
+Confirme que o firmware está atualizado, troque senhas padrão e mantenha o
+dispositivo em VLAN isolada sem acesso à internet, se possível.
+"""
+refs = []
+
+# ==========================================================================
+#  TESTE DE CREDENCIAL PADRÃO — DESLIGADO POR PADRÃO
+#
+#  Estas regras tentam autenticar. Elas cruzam a linha entre observar e
+#  interagir, e por isso nascem desativadas. Três motivos concretos:
+#
+#  1. Tentativa de login pode bloquear conta em sistema com política de
+#     lockout. Derrubar o administrador do domínio no meio da tarde não é
+#     um jeito aceitável de estrear a ferramenta.
+#  2. Gera evento de falha de autenticação no log do cliente, poluindo a
+#     própria trilha de auditoria que ele pode precisar depois.
+#  3. Sem autorização por escrito, testar credencial em equipamento de
+#     terceiro é problema jurídico, mesmo sendo cliente.
+#
+#  Regras de implementação, quando ativadas: uma única tentativa por
+#  combinação, sem repetição em varreduras seguintes, e nunca contra
+#  serviço de diretório (LDAP, Active Directory, RADIUS).
+# ==========================================================================
+
+[[rule]]
+id = "CRED-001"
+enabled = false
+requires_explicit_consent = true
+title = "Credencial padrão em painel web"
+category = "credentials"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "default_creds_http" }
+why = """
+O painel aceitou uma combinação de usuário e senha de fábrica. Quem estiver
+na rede tem controle administrativo do equipamento.
+"""
+fix = """
+Troque a senha agora e verifique se existem outras contas de fábrica
+ativas no mesmo equipamento.
+"""
+refs = ["CWE-1392"]
+
+[[rule]]
+id = "CRED-002"
+enabled = false
+requires_explicit_consent = true
+title = "Credencial padrão em SSH ou Telnet"
+category = "credentials"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "default_creds_shell" }
+why = """
+O acesso de linha de comando aceitou credencial de fábrica, o que dá
+controle total do equipamento.
+"""
+fix = """
+Troque a senha, desative contas de fábrica e prefira autenticação por
+chave onde for suportada.
+"""
+refs = ["CWE-1392"]
+
+[[rule]]
+id = "CRED-003"
+enabled = false
+requires_explicit_consent = true
+title = "Credencial padrão em banco de dados"
+category = "credentials"
+base_severity = "critical"
+confidence = "confirmed"
+match = { custom = "default_creds_db" }
+why = """
+O banco aceitou credencial padrão, como sa sem senha ou root sem senha.
+Todo o conteúdo está acessível.
+"""
+fix = """
+Defina senha forte, desative ou renomeie a conta padrão e revise as
+permissões dos demais usuários do banco.
+"""
+refs = ["CWE-1392"]
+
+# ==========================================================================
+#  NOTAS DE IMPLEMENTAÇÃO
+# ==========================================================================
+#
+#  POR QUE NÃO EXISTE CORRELAÇÃO DE BANNER COM CVE NESTE CATÁLOGO
+#
+#  Distribuições Linux fazem backport de correção de segurança sem alterar
+#  o número da versão. O Apache 2.4.29 do Ubuntu 18.04 recebeu anos de
+#  patch continuando a se chamar 2.4.29. Uma ferramenta que anuncia
+#  "Apache 2.4.29, vulnerável a CVE-2021-41773" está errada na maioria dos
+#  casos, e no dia em que o cliente descobrir isso ele para de confiar em
+#  tudo o que a ferramenta diz.
+#
+#  O que dá para afirmar com segurança é o fim de vida do produto inteiro,
+#  que é fato de calendário e independe de patch. É o que a seção [eol]
+#  faz. Correlação com CVE fica para uma versão futura, com feed de verdade
+#  e validação, nunca com regex em banner.
+#
+#  ------------------------------------------------------------------------
+#  MATCHERS QUE EXIGEM CÓDIGO RUST
+#
+#  Os demais são resolvidos pelo próprio TOML (porta aberta, regex em
+#  banner, fabricante, tipo de dispositivo). Estes precisam de sonda ativa
+#  ou de leitura de estado acumulado:
+#
+#    redis_noauth              PING → PONG sem AUTH
+#    mongo_noauth              handshake + comando simples sem credencial
+#    elastic_noauth            GET / sem autenticação
+#    memcached_reachable       comando stats
+#    smb_v1_negotiated         negociação de protocolo, sem autenticar
+#    smb_null_session          enumeração de compartilhamento sem credencial
+#    snmp_default_community_*  GET em OID de sistema com public e private
+#    http_admin_panel_no_tls   heurística de título, form de login e path
+#    cert_*                    leitura da cadeia TLS
+#    upnp_igd_portmap          enumeração IGD via SSDP
+#    arp_conflicting_mac       estado acumulado entre varreduras
+#    rogue_dhcp_offer          DHCPDISCOVER e contagem de respostas
+#
+#  Os quatro últimos dependem de estado ou de escuta, não de conexão a uma
+#  porta, e por isso rodam fora do laço de varredura de portas.
+#
+#  ------------------------------------------------------------------------
+#  ORDEM SUGERIDA DE IMPLEMENTAÇÃO
+#
+#  1. Tudo que é declarativo (porta, banner, fabricante). Cobre metade do
+#     catálogo sem escrever sonda nenhuma.
+#  2. eol_lookup. Custa uma tabela e entrega os achados mais graves.
+#  3. redis_noauth, mongo_noauth, elastic_noauth. Confiança confirmada,
+#     severidade crítica, e é o que impressiona na primeira demonstração.
+#  4. snmp_*, smb_v1_negotiated, cert_*.
+#  5. rogue_dhcp_offer, arp_conflicting_mac, upnp_igd_portmap. São os de
+#     maior retorno sobre esforço da categoria de higiene.
+#  6. Sondas de latência, perda e jitter.
+#  7. CRED-*, se e quando houver decisão consciente sobre isso.

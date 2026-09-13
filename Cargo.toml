@@ -1,0 +1,27 @@
+# ESTE é o manifesto do workspace. Ele NÃO tem [package] e NÃO usa
+# `edition.workspace = true`. Se o seu Cargo.toml da raiz tiver qualquer uma
+# dessas duas coisas, ele foi trocado pelo manifesto de um crate.
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/cli"]
+# app/src-tauri é workspace próprio, gerenciado pelo Tauri.
+exclude = ["app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

@@ -1,0 +1,25 @@
+[package]
+name = "sentinel-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "sentinel"
+path = "src/main.rs"
+
+[dependencies]
+# default-features = false é obrigatório aqui.
+#
+# O Cargo unifica features em todo o build: se o CLI pedir as features padrão
+# da core, o pnet é ativado mesmo quando você roda
+# `cargo test --workspace --no-default-features`, e o link contra Packet.lib
+# volta a falhar no Windows.
+sentinel-core = { path = "../core", default-features = false }
+anyhow.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+
+[features]
+default = ["raw-socket"]
+# Repassa para a core. Sem isto, `--no-default-features` não tem efeito real.
+raw-socket = ["sentinel-core/raw-socket"]

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissões mínimas. Nada de shell, nada de HTTP, nada de sistema de arquivos livre: toda a rede acontece no Rust, e o frontend só conversa por IPC.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "dialog:allow-save",
+    "dialog:allow-message"
+  ]
+}

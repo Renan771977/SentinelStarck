@@ -1,0 +1,32 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Tauri (gerado)
+app/src-tauri/target/
+app/src-tauri/gen/
+
+# Banco local — nunca versionar: contém inventário de rede real
+*.db
+*.db-wal
+*.db-shm
+sentinel.db*
+
+# Base OUI (baixada no setup, ~1 MB)
+crates/core/data/oui.tsv
+
+# Fontes (baixadas no setup)
+app/src/assets/fonts/
+
+# Editor e SO
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

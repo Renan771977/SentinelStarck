@@ -1,0 +1,23 @@
+{
+  // Sem isto o rust-analyzer não indexa o crate do Tauri, que fica fora do
+  // workspace principal, e metade do autocomplete desaparece.
+  "rust-analyzer.linkedProjects": [
+    "./Cargo.toml",
+    "./app/src-tauri/Cargo.toml"
+  ],
+
+  // O `tauri::generate_context!()` lê o OUT_DIR produzido pelo tauri-build.
+  // Sem rodar os scripts de build, o rust-analyzer marca a macro com
+  // "OUT_DIR env var is not set" — falso positivo: o cargo build funciona.
+  "rust-analyzer.cargo.buildScripts.enable": true,
+  "rust-analyzer.procMacro.enable": true,
+
+  // A crate do Tauri e a core têm features diferentes. Analisar com as
+  // features padrão evita erro fantasma nos blocos #[cfg(feature = ...)].
+  "rust-analyzer.cargo.features": "all",
+
+  "rust-analyzer.check.command": "clippy",
+  "[rust]": { "editor.formatOnSave": true },
+  "files.associations": { "rules.toml": "toml" },
+  "tailwindCSS.experimental.classRegex": [["className=\"([^\"]*)", "([a-zA-Z0-9\\-:]+)"]]
+}
