@@ -3,9 +3,12 @@ import {
   Radar, Server, Network, AlertTriangle, GitCompareArrows, Settings2,
   Search, Play, Square, ShieldAlert, ShieldCheck, Wifi, Router, Printer,
   Monitor, Camera, HardDrive, CircleHelp, ChevronRight, ChevronDown,
-  Check, EyeOff, Clock, Lock, Unlock, Cable, Inbox,
+  Check, EyeOff, Clock, Lock, Unlock, Cable, Inbox, TerminalSquare,
 } from "lucide-react";
 import { useSentinel, PHASE_LABEL } from "./lib/useSentinel";
+import { useTerminal } from "./lib/useTerminal";
+import TerminalPanel, { DeviceTerminalActions } from "./components/TerminalPanel";
+import NetworkMap from "./components/NetworkMap";
 
 /* ------------------------------------------------------------------ */
 /*  Tokens                                                             */
@@ -341,7 +344,7 @@ function Devices({ devices, onOpen, scanning, onScan }) {
 /* ------------------------------------------------------------------ */
 /*  Detalhe                                                            */
 /* ------------------------------------------------------------------ */
-function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept }) {
+function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, onOpenTerminal }) {
   const [tab, setTab] = useState("portas");
   const [detail, setDetail] = useState(null);
   const [err, setErr] = useState(null);
@@ -396,6 +399,19 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept })
           </button>
         </div>
       </div>
+
+      {onOpenTerminal && detail && (
+        <Panel title="Conectar">
+          {/* Só os serviços que a varredura realmente encontrou. Oferecer SSH
+              num host sem a porta 22 é convidar o usuário a esperar timeout. */}
+          <DeviceTerminalActions
+            ip={device.ip}
+            label={device.label}
+            services={detail.services}
+            onOpen={onOpenTerminal}
+          />
+        </Panel>
+      )}
 
       <div className="flex gap-1">
         {["portas", "achados", "endereços"].map((t) => (
@@ -659,93 +675,73 @@ function Changes({ changes, onAck }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Mapa                                                               */
-/* ------------------------------------------------------------------ */
-function MapView({ devices, onOpen }) {
-  if (devices.length === 0) {
-    return <Panel><Empty icon={Network} title="Sem dados para desenhar o mapa" /></Panel>;
-  }
-
-  const gw = devices.find((d) => d.kind === "router") || devices[0];
-  const sw = devices.find((d) => d.kind === "switch");
-  const leaves = devices.filter((d) => d !== gw && d !== sw);
-
-  const W = 980, cols = 7, cw = W / cols;
-  const swY = 150, leafY = 290;
-  const rows = Math.ceil(leaves.length / cols);
-  const H = leafY + rows * 110 + 20;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm" style={{ ...sans, color: C.dim }}>
-        Hierarquia da sub-rede. A borda colorida indica o achado mais grave de cada dispositivo.
-      </p>
-      <div className="rounded-lg p-4 overflow-x-auto" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", minWidth: 900 }}>
-          {sw && <line x1={W / 2} y1={62} x2={W / 2} y2={swY - 22} stroke={C.line} strokeWidth="1.5" />}
-          {leaves.map((_, i) => {
-            const x = cw * (i % cols) + cw / 2;
-            const y = leafY + Math.floor(i / cols) * 110;
-            const from = sw ? swY + 22 : 62;
-            return <path key={i} d={`M${W / 2},${from} L${W / 2},${y - 55} L${x},${y - 55} L${x},${y - 26}`}
-              fill="none" stroke={C.line} strokeWidth="1.5" />;
-          })}
-          <MapNode x={W / 2} y={40} d={gw} onOpen={onOpen} root />
-          {sw && <MapNode x={W / 2} y={swY} d={sw} onOpen={onOpen} />}
-          {leaves.map((d, i) => (
-            <MapNode key={d.id} d={d} onOpen={onOpen}
-              x={cw * (i % cols) + cw / 2} y={leafY + Math.floor(i / cols) * 110} />
-          ))}
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function MapNode({ x, y, d, onOpen, root }) {
-  const r = root ? 22 : 18;
-  const sev = d.worstSeverityRank !== null ? BY_RANK[d.worstSeverityRank] : null;
-  const color = sev ? SEV[sev].color : d.missCount === 0 ? C.line : C.faint;
-  const short = (d.ip || "").split(".").slice(2).join(".") || "?";
-  return (
-    <g onClick={() => onOpen(d)} style={{ cursor: "pointer" }}>
-      <circle cx={x} cy={y} r={r} fill={C.raised} stroke={color} strokeWidth={sev ? 2 : 1.5} />
-      <text x={x} y={y + 4} textAnchor="middle" style={{ ...sans, fontSize: 11, fill: C.dim }}>
-        {(KIND_LABEL[d.kind] || "?").slice(0, 3)}
-      </text>
-      <text x={x} y={y + r + 15} textAnchor="middle" style={{ ...mono, fontSize: 10, fill: C.text }}>{short}</text>
-      <text x={x} y={y + r + 28} textAnchor="middle" style={{ ...sans, fontSize: 10, fill: C.faint }}>
-        {(d.label || "sem nome").slice(0, 15)}
-      </text>
-    </g>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Configurações                                                      */
 /* ------------------------------------------------------------------ */
-function SettingsView({ caps, iface, cidr, rules }) {
+function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelect }) {
   const total = Object.keys(rules).length;
   const off = Object.values(rules).filter((r) => !r.enabled).length;
 
   return (
     <div className="flex flex-col gap-4" style={{ maxWidth: 760 }}>
-      <Panel title="Interface de rede">
-        <div className="flex flex-col gap-3">
-          <Row label="Interface" value={iface || "—"} />
-          <Row label="Faixa detectada" value={cidr || "—"} />
+      <Panel title="Interfaces de rede">
+        <div className="flex flex-col gap-1">
+          {(interfaces || []).filter((i) => !i.isLoopback).map((i) => (
+            <button key={i.name} onClick={() => onSelect?.(i.name)}
+              className="flex items-center gap-3 px-2 h-11 rounded-md text-left"
+              style={{ background: i.name === iface ? C.raised : "transparent" }}>
+              <span className="rounded-full shrink-0"
+                style={{ width: 7, height: 7, background: i.arpCapable ? C.ok : SEV.medium.color }} />
+              <span className="flex-1 min-w-0">
+                <span className="text-sm block truncate" style={{ ...sans, color: C.text }}>{i.name}</span>
+                <span className="text-xs" style={{ ...mono, color: C.faint }}>
+                  {i.address || "sem IPv4"}
+                </span>
+              </span>
+              <span className="text-xs shrink-0" style={{ ...sans, color: i.arpCapable ? C.ok : SEV.medium.color }}>
+                {i.arpCapable ? "ARP disponível" : "sem ARP"}
+              </span>
+              {i.name === iface && (
+                <span className="text-xs shrink-0" style={{ ...sans, color: C.cyan }}>em uso</span>
+              )}
+            </button>
+          ))}
+          <div className="pt-2">
+            <Row label="Faixa a varrer" value={cidr || "—"} />
+          </div>
           <p className="text-sm leading-relaxed pt-1" style={{ ...sans, color: C.faint, maxWidth: "70ch" }}>
-            O sensor enxerga apenas a VLAN onde está conectado. Outras VLANs precisam de uma
-            instância própria ou de leitura via SNMP no roteador.
+            Adaptador virtual de VirtualBox, Hyper-V ou WSL aparece nesta lista mas não
+            tem canal de enlace, então nunca vai oferecer ARP. Escolha a placa física
+            ligada à rede que você quer auditar.
+          </p>
+          <p className="text-sm leading-relaxed" style={{ ...sans, color: C.faint, maxWidth: "70ch" }}>
+            O sensor enxerga apenas a VLAN onde está conectado. Outras VLANs precisam de
+            uma instância própria ou de leitura via SNMP no roteador.
           </p>
         </div>
       </Panel>
 
-      <Panel title="Permissões do sistema">
+      <Panel title="Permissões do sistema"
+        action={
+          <button onClick={onRecheck} className="text-xs" style={{ ...sans, color: C.cyan }}>
+            Verificar novamente
+          </button>
+        }>
         <div className="flex flex-col gap-3">
           <Capability on name="Varredura de portas TCP" note="Não exige privilégio" />
-          <Capability on={caps?.arpActive} name="Varredura ARP ativa" note="Exige CAP_NET_RAW no binário" />
-          <Capability on={caps?.passiveListen} name="Escuta passiva de broadcast" note="Exige CAP_NET_RAW no binário" />
+          <Capability on={caps?.arpActive} name="Varredura ARP ativa"
+            note="Exige Npcap no Windows, CAP_NET_RAW no Linux" />
+          <Capability on={caps?.passiveListen} name="Escuta passiva de broadcast"
+            note="Mesma exigência do ARP" />
+          {caps?.arpActive && (
+            <div className="rounded-md p-3 flex gap-2.5 mt-1"
+              style={{ background: `${C.ok}12`, border: `1px solid ${C.ok}33` }}>
+              <ShieldCheck size={15} style={{ color: C.ok }} className="mt-0.5 shrink-0" />
+              <p className="text-sm leading-relaxed" style={{ ...sans, color: C.dim, maxWidth: "68ch" }}>
+                Modo completo. A varredura ARP encontra todo dispositivo da rede local,
+                inclusive os que bloqueiam ping e mantêm todas as portas fechadas.
+              </p>
+            </div>
+          )}
           {caps?.reason && (
             <div className="rounded-md p-3 flex gap-2.5 mt-1"
               style={{ background: `${SEV.medium.color}12`, border: `1px solid ${SEV.medium.color}33` }}>
@@ -810,6 +806,7 @@ const NAV = [
   { id: "findings", label: "Achados", icon: AlertTriangle },
   { id: "changes", label: "Mudanças", icon: GitCompareArrows },
   { id: "map", label: "Mapa", icon: Network },
+  { id: "terminal", label: "Terminal", icon: TerminalSquare, needsTerminal: true },
   { id: "settings", label: "Configurações", icon: Settings2 },
 ];
 
@@ -817,8 +814,10 @@ export default function App() {
   const {
     iface, cidr, caps, devices, changes, findings, rules, loading, scan,
     startScan, cancelScan, ackChange, renameDevice, loadDetail, acceptFinding,
-    unseenChanges,
+    recheckCaps, selectInterface, interfaces, unseenChanges,
   } = useSentinel();
+
+  const term = useTerminal();
 
   const [view, setView] = useState("overview");
   const [selected, setSelected] = useState(null);
@@ -837,7 +836,7 @@ export default function App() {
         </div>
 
         <div className="flex flex-col gap-0.5 p-2">
-          {NAV.map((n) => {
+          {NAV.filter((n) => !n.needsTerminal || term.available).map((n) => {
             const active = view === n.id || (view === "device" && n.id === "devices");
             return (
               <button key={n.id} onClick={() => { setView(n.id); setSelected(null); }}
@@ -854,35 +853,62 @@ export default function App() {
                   <span className="ml-auto rounded px-1.5 text-xs"
                     style={{ ...mono, background: `${SEV.high.color}2A`, color: SEV.high.color }}>{findings.length}</span>
                 )}
+                {n.id === "terminal" && term.sessions.length > 0 && (
+                  <span className="ml-auto rounded px-1.5 text-xs"
+                    style={{ ...mono, background: `${C.cyan}22`, color: C.cyan }}>{term.sessions.length}</span>
+                )}
               </button>
             );
           })}
         </div>
 
-        <div className="mt-auto p-3">
-          <div className="rounded-md p-2.5" style={{ background: C.raised, border: `1px solid ${C.line}` }}>
-            <div className="flex items-center gap-1.5">
-              {caps?.arpActive ? <Lock size={11} style={{ color: C.ok }} />
-                : <Unlock size={11} style={{ color: SEV.medium.color }} />}
-              <span className="text-xs" style={{ color: caps?.arpActive ? C.ok : SEV.medium.color }}>
-                {caps?.arpActive ? "Modo completo" : "Modo limitado"}
-              </span>
+        {/* Só aparece quando há algo a resolver.
+            Um aviso permanente dizendo "está tudo bem" é ruído: some da
+            atenção em dois dias e deixa de funcionar como aviso no dia em que
+            realmente houver problema. Em modo completo, o estado fica visível
+            em Configurações, que é onde se vai procurar por ele. */}
+        {caps && !caps.arpActive && (
+          <div className="mt-auto p-3">
+            <div className="rounded-md p-2.5" style={{ background: C.raised, border: `1px solid ${SEV.medium.color}44` }}>
+              <div className="flex items-center gap-1.5">
+                <Unlock size={11} style={{ color: SEV.medium.color }} />
+                <span className="text-xs" style={{ color: SEV.medium.color }}>Modo limitado</span>
+              </div>
+              <p className="text-xs mt-1 leading-snug" style={{ color: C.faint }}>
+                {caps.reason || "Apenas varredura TCP."}
+              </p>
+              <button onClick={recheckCaps} className="text-xs mt-2" style={{ color: C.cyan }}>
+                Verificar novamente
+              </button>
             </div>
-            <p className="text-xs mt-1 leading-snug" style={{ color: C.faint }}>
-              {caps?.arpActive ? "ARP e escuta passiva disponíveis." : "Apenas varredura TCP."}
-            </p>
           </div>
-        </div>
+        )}
       </nav>
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="h-14 shrink-0 flex items-center gap-4 px-6"
           style={{ borderBottom: `1px solid ${C.line}`, background: C.panel }}>
-          <div className="flex items-center gap-2">
-            <Mono dim>{iface || "—"}</Mono>
-            <span style={{ color: C.faint }}>·</span>
-            <Mono>{cidr || "—"}</Mono>
-          </div>
+          {/* Seletor, não rótulo. Máquina com VirtualBox, Hyper-V ou WSL tem
+              várias interfaces, e só uma delas é a rede que se quer varrer.
+              O aviso ao lado de cada uma diz qual consegue ARP. */}
+          <select
+            value={iface || ""}
+            onChange={(e) => selectInterface(e.target.value)}
+            disabled={scan.running}
+            className="rounded-md px-2 h-8 text-sm outline-none"
+            style={{
+              ...mono, fontSize: 13,
+              background: C.raised, color: C.text,
+              border: `1px solid ${C.line}`,
+              opacity: scan.running ? 0.5 : 1,
+            }}>
+            {interfaces.length === 0 && <option value="">sem interface</option>}
+            {interfaces.filter((i) => !i.isLoopback).map((i) => (
+              <option key={i.name} value={i.name} style={{ background: C.panel }}>
+                {i.name} · {i.network || "sem IPv4"}{i.arpCapable ? "" : "  (sem ARP)"}
+              </option>
+            ))}
+          </select>
           <span className="text-xs" style={{ color: C.faint }}>
             {scan.running
               ? `${PHASE_LABEL[scan.phase] || "Varrendo"}… ${scan.percent}%`
@@ -910,7 +936,19 @@ export default function App() {
           </div>
         )}
 
-        <main className="flex-1 p-6 overflow-auto">
+        {/* O terminal fica MONTADO o tempo todo, só oculto.
+            Desmontar destruiria as instâncias do xterm e o histórico da tela
+            iria embora, enquanto a sessão continuaria viva no Rust: ao voltar,
+            um terminal em branco com só o cursor, porque o shell não reimprime
+            um prompt que já imprimiu. */}
+        <div className="flex-1 min-h-0 relative">
+          <main className="absolute inset-0 p-6"
+            style={{
+              display: view === "terminal" ? "none" : "block",
+              // O mapa gerencia o próprio deslocamento com zoom e arrasto;
+              // rolagem do container brigaria com ele.
+              overflow: view === "map" ? "hidden" : "auto",
+            }}>
           {loading ? (
             <Panel><p className="text-sm" style={{ ...sans, color: C.faint }}>Abrindo o banco…</p></Panel>
           ) : (
@@ -924,15 +962,52 @@ export default function App() {
               )}
               {view === "device" && selected && (
                 <DeviceDetail device={selected} rules={rules} loadDetail={loadDetail}
-                  onBack={() => setView("devices")} onRename={renameDevice} onAccept={acceptFinding} />
+                  onBack={() => setView("devices")} onRename={renameDevice} onAccept={acceptFinding}
+                  onOpenTerminal={term.available
+                    ? async (spec) => { await term.openSession(spec); setView("terminal"); }
+                    : null} />
               )}
               {view === "findings" && <Findings findings={findings} rules={rules} onAccept={acceptFinding} />}
               {view === "changes" && <Changes changes={changes} onAck={ackChange} />}
-              {view === "map" && <MapView devices={devices} onOpen={open} />}
-              {view === "settings" && <SettingsView caps={caps} iface={iface} cidr={cidr} rules={rules} />}
+              {view === "map" && (
+                devices.length === 0
+                  ? <Panel><Empty icon={Network} title="Sem dados para desenhar o mapa"
+                      hint="Rode uma varredura para montar a topologia." /></Panel>
+                  : <div className="h-full"><NetworkMap devices={devices} cidr={cidr} onOpen={open} /></div>
+              )}
+              {view === "settings" && (
+                <SettingsView caps={caps} iface={iface} cidr={cidr} rules={rules}
+                  interfaces={interfaces} onRecheck={recheckCaps} onSelect={selectInterface} />
+              )}
             </>
           )}
-        </main>
+          </main>
+
+          {term.available && (
+            <div className="absolute inset-0 flex flex-col"
+              style={{ display: view === "terminal" ? "flex" : "none" }}>
+              {term.error && (
+                <div className="flex items-center gap-2 px-3 py-2 shrink-0"
+                  style={{ background: "#FF4D6D12", borderBottom: `1px solid ${SEV.critical.color}44` }}>
+                  <AlertTriangle size={14} style={{ color: SEV.critical.color }} className="shrink-0" />
+                  <span className="text-xs flex-1" style={{ ...sans, color: C.dim }}>{term.error}</span>
+                  <button onClick={term.clearError} className="text-xs" style={{ ...sans, color: C.faint }}>
+                    fechar
+                  </button>
+                </div>
+              )}
+              <div className="flex-1 min-h-0">
+                <TerminalPanel
+                  sessions={term.sessions}
+                  onOpen={term.openSession}
+                  onClose={term.closeSession}
+                  visible={view === "terminal"}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

@@ -47,6 +47,11 @@ export interface InterfaceInfo {
   /** A rede a varrer, já calculada no Rust: "192.168.1.0/24". */
   network: string | null;
   isLoopback: boolean;
+  /**
+   * Se a varredura ARP funciona nesta interface. Testado de verdade, abrindo
+   * o canal de enlace. Adaptador virtual costuma vir `false`.
+   */
+  arpCapable: boolean;
 }
 
 export interface DeviceRow {
@@ -58,8 +63,13 @@ export interface DeviceRow {
   vendor: string | null;
   osGuess: string | null;
   identityConfidence: Confidence;
+  hostname: string | null;
+  /** Primeira observação deste dispositivo nesta rede. Base da linha do tempo. */
+  firstSeen: number;
   lastSeen: number;
   missCount: number;
+  /** Quantos IPs diferentes já teve. Alto indica DHCP instável ou evasão. */
+  ipHistoryCount: number;
   openPorts: number;
   findingCount: number;
   /** 0 = crítica … 4 = info. null quando não há achado aberto. */
@@ -145,20 +155,21 @@ export interface ChangeRow {
 // ---------------------------------------------------------------------------
 
 export interface ScanProgress {
-  scan_id: string;
+  scanId: string;
   phase: "discovery" | "resolution" | "ports" | "rules" | "diffing";
   done: number;
   total: number;
 }
 
 export interface ScanDeviceEvent {
-  scan_id: string;
+  scanId: string;
+  /** Linha completa, igual à da lista: a ponte recarrega do banco. */
   device: DeviceRow;
-  is_new: boolean;
+  isNew: boolean;
 }
 
 export interface ScanFinished {
-  scan_id: string;
+  scanId: string;
   found: number;
   new: number;
   gone: number;
@@ -212,6 +223,9 @@ export const api = {
 
   findingAccept: (id: number, reason: string, validDays?: number) =>
     invoke<void>("finding_accept", { id, reason, validDays }),
+
+  /** Falso quando o binário foi compilado sem a feature `terminal`. */
+  terminalAvailable: () => invoke<boolean>("terminal_available"),
 
   exclusionsList: () => invoke<string[]>("exclusions_list"),
   exclusionAdd: (target: string, reason?: string) =>

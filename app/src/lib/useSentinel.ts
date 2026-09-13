@@ -10,7 +10,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   api, events,
   type Capabilities, type ChangeRow, type DeviceDetail, type DeviceRow,
-  type FindingInfo, type PortProfile, type RuleInfo, type ScanProgress,
+  type FindingInfo, type InterfaceInfo, type PortProfile, type RuleInfo,
+  type ScanProgress,
 } from "./api";
 
 /** Rótulo de fase para a barra de progresso. */
@@ -34,6 +35,7 @@ export function useSentinel(initialInterface = "") {
   const [iface, setIface] = useState(initialInterface);
   const [cidr, setCidr] = useState("");
   const [caps, setCaps] = useState<Capabilities | null>(null);
+  const [interfaces, setInterfaces] = useState<InterfaceInfo[]>([]);
   const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [changes, setChanges] = useState<ChangeRow[]>([]);
   const [findings, setFindings] = useState<FindingInfo[]>([]);
@@ -66,10 +68,19 @@ export function useSentinel(initialInterface = "") {
     (async () => {
       try {
         const ifaces = await api.listInterfaces();
-        // Primeira interface não-loopback com rede válida. O loopback vem
-        // por último na lista da core justamente para não ser escolhido.
-        const pick = ifaces.find((i) => !i.isLoopback && i.network) ?? ifaces[0];
         if (!alive) return;
+        setInterfaces(ifaces);
+
+        // Prefere uma interface que REALMENTE consiga ARP.
+        //
+        // Escolher só "a primeira não-loopback" pegava adaptador virtual do
+        // VirtualBox ou do Hyper-V, que aparece na lista mas não tem canal de
+        // enlace. O aplicativo caía em modo limitado sem motivo aparente, com
+        // a placa física funcionando ao lado.
+        const pick =
+          ifaces.find((i) => i.arpCapable && i.network) ??
+          ifaces.find((i) => !i.isLoopback && i.network) ??
+          ifaces[0];
 
         if (pick) {
           setIface(pick.name);
@@ -178,6 +189,40 @@ export function useSentinel(initialInterface = "") {
     [],
   );
 
+  /**
+   * Reconsulta as capacidades.
+   *
+   * O estado muda fora do aplicativo: instalar o Npcap, rodar como
+   * administrador, trocar de interface. Sem isto a pessoa resolve o problema e
+   * continua vendo "modo limitado" até reiniciar, achando que não funcionou.
+   */
+  const recheckCaps = useCallback(async () => {
+    if (!iface) return;
+    try {
+      // Relista também: instalar o Npcap muda o veredito de todas as
+      // interfaces, não só o da atual.
+      setInterfaces(await api.listInterfaces());
+      setCaps(await api.getCapabilities(iface));
+    } catch {
+      /* mantém o estado anterior */
+    }
+  }, [iface]);
+
+  /** Troca a interface ativa e ajusta a faixa junto. */
+  const selectInterface = useCallback(
+    async (name: string) => {
+      const found = interfaces.find((i) => i.name === name);
+      setIface(name);
+      if (found?.network) setCidr(found.network);
+      try {
+        setCaps(await api.getCapabilities(name));
+      } catch {
+        /* mantém o estado anterior */
+      }
+    },
+    [interfaces],
+  );
+
   const acceptFinding = useCallback(async (id: number, reason: string) => {
     await api.findingAccept(id, reason);
     setFindings((fs) => fs.filter((f) => f.id !== id));
@@ -185,8 +230,9 @@ export function useSentinel(initialInterface = "") {
 
   return {
     iface, setIface, cidr, setCidr,
-    caps, devices, changes, findings, rules, loading, scan,
+    caps, interfaces, devices, changes, findings, rules, loading, scan,
     startScan, cancelScan, ackChange, renameDevice, loadDetail, acceptFinding,
+    recheckCaps, selectInterface,
     unseenChanges: changes.filter((c) => !c.acknowledged).length,
   };
 }

@@ -1,5 +1,12 @@
 //! Tipos compartilhados entre motor, banco e interface.
 //!
+//! REGRA: todo tipo que cruza a fronteira para o frontend leva
+//! `#[serde(rename_all = "camelCase")]`. Sem isso o Rust manda `arp_active` e
+//! o TypeScript lê `arpActive`, que vira `undefined` — e `undefined` é falso,
+//! então o erro não estoura: ele aparece como funcionalidade que "não liga",
+//! e custa horas para achar. A geração automática de tipos com `ts-rs` mataria
+//! essa classe inteira de bug de uma vez.
+//!
 //! Tudo aqui deriva Serialize para poder cruzar a fronteira do Tauri sem
 //! conversão manual. No app real, anote também com `#[derive(TS)]` da crate
 //! `ts-rs` para gerar os tipos TypeScript automaticamente: sem isso, todo
@@ -190,6 +197,7 @@ impl Method {
 /// Persistir isto cru permite reprocessar a identidade quando a heurística
 /// melhorar, sem perder histórico.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Observation {
     pub ip: Option<IpAddr>,
     pub mac: Option<Mac>,
@@ -202,6 +210,7 @@ pub struct Observation {
 
 /// A entidade estável. O `id` nunca muda, mesmo que IP, MAC e nome mudem.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Device {
     pub id: String,
     pub label: Option<String>,
@@ -227,6 +236,7 @@ pub struct Device {
 /// A interface consome isto para desabilitar botão com explicação, em vez de
 /// deixar o usuário clicar e receber erro.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Capabilities {
     pub arp_active: bool,
     pub passive_listen: bool,
@@ -237,6 +247,7 @@ pub struct Capabilities {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScanConfig {
     pub interface: String,
     pub target_cidr: String,
@@ -293,6 +304,7 @@ pub enum ScanPhase {
 /// se vira `emit()` para o frontend ou linha no terminal do CLI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[serde(rename_all_fields = "camelCase")]
 pub enum ScanEvent {
     Progress {
         scan_id: String,
@@ -356,6 +368,7 @@ impl ChangeType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Change {
     pub device_id: String,
     pub change_type: ChangeType,

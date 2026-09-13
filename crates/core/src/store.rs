@@ -13,10 +13,13 @@ pub use rusqlite;
 use std::path::Path;
 
 /// Migrações em ordem. Nunca edite uma já aplicada: crie a próxima.
-const MIGRATIONS: &[(&str, &str)] = &[(
-    "0001_initial",
-    include_str!("../migrations/0001_initial.sql"),
-)];
+const MIGRATIONS: &[(&str, &str)] = &[
+    ("0001_initial", include_str!("../migrations/0001_initial.sql")),
+    (
+        "0002_device_summary_forensics",
+        include_str!("../migrations/0002_device_summary_forensics.sql"),
+    ),
+];
 
 pub fn open(path: &Path) -> Result<Connection> {
     if let Some(dir) = path.parent() {
@@ -98,12 +101,25 @@ mod tests {
     fn migracao_e_idempotente() {
         let conn = open_memory().unwrap();
         let v: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
-        assert_eq!(v, 1);
+        // Afirma a relação, não o número: assim o teste não quebra a cada
+        // migração nova, mas ainda detecta migração que não foi registrada.
+        assert_eq!(v, MIGRATIONS.len() as i64);
 
         // Rodar de novo não deve fazer nada nem falhar.
         migrate(&conn).unwrap();
         let v2: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
-        assert_eq!(v2, 1);
+        assert_eq!(v2, v);
+    }
+
+    /// A view de resumo precisa expor os campos que a investigação usa.
+    #[test]
+    fn view_de_resumo_tem_campos_forenses() {
+        let conn = open_memory().unwrap();
+        let mut stmt = conn.prepare("SELECT * FROM v_device_summary LIMIT 0").unwrap();
+        let cols: Vec<String> = stmt.column_names().iter().map(|c| c.to_string()).collect();
+        for c in ["first_seen", "hostname", "ip_history_count", "ip", "mac"] {
+            assert!(cols.contains(&c.to_string()), "coluna {c} faltando na view");
+        }
     }
 
     #[test]

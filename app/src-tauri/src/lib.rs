@@ -16,8 +16,11 @@
 //! leitores simultâneos com um escritor. Então o estado guarda só o caminho do
 //! arquivo, e cada comando abre e fecha a sua.
 
+#[cfg(feature = "terminal")]
+mod pty;
+
 use sentinel_core::model::{Capabilities, PortProfile, ScanConfig, ScanEvent};
-use sentinel_core::net::iface::{self, InterfaceInfo};
+use sentinel_core::net::iface;
 // Reexportado pela core: garante versão única do rusqlite em todo o projeto.
 use sentinel_core::store::rusqlite;
 use sentinel_core::{scan, store};
@@ -33,6 +36,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct AppState {
     db_path: PathBuf,
+    /// Sessões de terminal abertas. Vive no estado porque precisa sobreviver
+    /// entre comandos e ser encerrado quando a janela fecha.
+    #[cfg(feature = "terminal")]
+    pty: Arc<pty::PtyRegistry>,
     /// Só uma varredura por vez. Tentar duas ao mesmo tempo na mesma interface
     /// gera colisão de ARP e resultado inconsistente.
     scanning: Arc<AtomicBool>,
@@ -65,8 +72,14 @@ pub struct DeviceRow {
     pub vendor: Option<String>,
     pub os_guess: Option<String>,
     pub identity_confidence: String,
+    pub hostname: Option<String>,
+    /// Primeira vez que este dispositivo foi observado nesta rede.
+    pub first_seen: i64,
     pub last_seen: i64,
     pub miss_count: i32,
+    /// Quantos IPs diferentes já teve. Alto indica DHCP instável ou, em
+    /// investigação, troca deliberada de endereço.
+    pub ip_history_count: i64,
     pub open_ports: i64,
     pub finding_count: i64,
     /// 0 = crítica … 4 = info, NULL quando não há achado aberto.
@@ -167,15 +180,41 @@ fn get_capabilities(interface: String) -> Capabilities {
     scan::capabilities(&interface)
 }
 
-/// Interfaces disponíveis para varredura.
+/// Uma interface, com o veredito de se ela consegue varredura ARP.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterfaceOption {
+    pub name: String,
+    pub address: Option<String>,
+    pub network: Option<String>,
+    pub is_loopback: bool,
+    /// Testado de verdade, abrindo o canal de enlace.
+    pub arp_capable: bool,
+}
+
+/// Interfaces disponíveis, cada uma com o veredito sobre ARP.
 ///
-/// Delegado à core, que usa `if-addrs` em vez de `pnet`. Isso importa: se
-/// dependesse do pnet, o modo limitado devolveria lista vazia e o botão de
-/// escanear ficaria permanentemente desabilitado justamente para quem não tem
-/// o SDK do Npcap instalado.
+/// O teste por interface existe porque adaptador virtual (VirtualBox,
+/// Hyper-V, WSL) aparece na lista do sistema mas não tem canal de enlace que o
+/// Npcap consiga abrir. Escolher um deles por acidente deixa o aplicativo em
+/// modo limitado sem motivo aparente, e foi exatamente o que acontecia quando
+/// a escolha era "a primeira interface não-loopback".
 #[tauri::command]
-fn list_interfaces() -> Vec<InterfaceInfo> {
+fn list_interfaces() -> Vec<InterfaceOption> {
     iface::list()
+        .into_iter()
+        .map(|i| {
+            // Loopback nunca é alvo de varredura; nem vale abrir canal nele.
+            let arp_capable = !i.is_loopback && scan::capabilities(&i.name).arp_active;
+            InterfaceOption {
+                name: i.name,
+                address: i.address,
+                network: i.network,
+                is_loopback: i.is_loopback,
+                arp_capable,
+            }
+        })
+        .collect()
 }
 
 /// Dispara a varredura e retorna imediatamente.
@@ -220,15 +259,34 @@ async fn scan_start(
     // Um canal por tipo de evento, para o frontend poder escutar só o que
     // interessa em cada tela.
     let app_ev = app.clone();
+    let db_for_bridge = state.db_path.clone();
     tokio::spawn(async move {
+        // O evento do núcleo traz um `Device`, que não tem IP, MAC nem
+        // contagem de portas — esses campos vivem na view `v_device_summary`.
+        // Emitir o Device cru faria a lista mostrar traço no lugar do endereço
+        // durante toda a varredura. A ponte recarrega a linha completa: uma
+        // consulta por dispositivo descoberto, irrelevante no total.
+        let conn = store::open(&db_for_bridge).ok();
+
         while let Some(ev) = rx.recv().await {
-            let channel = match &ev {
-                ScanEvent::Progress { .. } => "scan:progress",
-                ScanEvent::Device { .. } => "scan:device",
-                ScanEvent::Finished { .. } => "scan:finished",
-                ScanEvent::Failed { .. } => "scan:failed",
-            };
-            let _ = app_ev.emit(channel, &ev);
+            match &ev {
+                ScanEvent::Device { scan_id, device, is_new } => {
+                    let row = conn.as_ref().and_then(|c| load_device_row(c, &device.id));
+                    if let Some(row) = row {
+                        let _ = app_ev.emit(
+                            "scan:device",
+                            serde_json::json!({
+                                "scanId": scan_id,
+                                "device": row,
+                                "isNew": is_new,
+                            }),
+                        );
+                    }
+                }
+                ScanEvent::Progress { .. } => { let _ = app_ev.emit("scan:progress", &ev); }
+                ScanEvent::Finished { .. } => { let _ = app_ev.emit("scan:finished", &ev); }
+                ScanEvent::Failed { .. } => { let _ = app_ev.emit("scan:failed", &ev); }
+            }
         }
     });
 
@@ -315,39 +373,48 @@ fn scan_is_running(state: State<'_, AppState>) -> bool {
     state.scanning.load(Ordering::SeqCst)
 }
 
+const DEVICE_ROW_COLUMNS: &str =
+    "id, label, ip, mac, kind, vendor, os_guess, identity_confidence, hostname,
+     first_seen, last_seen, miss_count, ip_history_count, open_ports,
+     finding_count, worst_severity_rank";
+
+fn map_device_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<DeviceRow> {
+    Ok(DeviceRow {
+        id: r.get(0)?,
+        label: r.get(1)?,
+        ip: r.get(2)?,
+        mac: r.get(3)?,
+        kind: r.get(4)?,
+        vendor: r.get(5)?,
+        os_guess: r.get(6)?,
+        identity_confidence: r.get(7)?,
+        hostname: r.get(8)?,
+        first_seen: r.get(9)?,
+        last_seen: r.get(10)?,
+        miss_count: r.get(11)?,
+        ip_history_count: r.get(12)?,
+        open_ports: r.get(13)?,
+        finding_count: r.get(14)?,
+        worst_severity_rank: r.get(15)?,
+    })
+}
+
 #[tauri::command]
 fn devices_list(state: State<'_, AppState>) -> Result<Vec<DeviceRow>, String> {
     let conn = state.conn()?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, label, ip, mac, kind, vendor, os_guess, identity_confidence,
-                    last_seen, miss_count, open_ports, finding_count, worst_severity_rank
-               FROM v_device_summary
-              ORDER BY worst_severity_rank IS NULL, worst_severity_rank, ip",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-        .query_map([], |r| {
-            Ok(DeviceRow {
-                id: r.get(0)?,
-                label: r.get(1)?,
-                ip: r.get(2)?,
-                mac: r.get(3)?,
-                kind: r.get(4)?,
-                vendor: r.get(5)?,
-                os_guess: r.get(6)?,
-                identity_confidence: r.get(7)?,
-                last_seen: r.get(8)?,
-                miss_count: r.get(9)?,
-                open_ports: r.get(10)?,
-                finding_count: r.get(11)?,
-                worst_severity_rank: r.get(12)?,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-
+    let sql = format!(
+        "SELECT {DEVICE_ROW_COLUMNS} FROM v_device_summary
+          ORDER BY worst_severity_rank IS NULL, worst_severity_rank, ip"
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], map_device_row).map_err(|e| e.to_string())?;
     rows.collect::<Result<_, _>>().map_err(|e| e.to_string())
+}
+
+/// Carrega uma linha só. Usada pela ponte de eventos durante a varredura.
+fn load_device_row(conn: &rusqlite::Connection, id: &str) -> Option<DeviceRow> {
+    let sql = format!("SELECT {DEVICE_ROW_COLUMNS} FROM v_device_summary WHERE id = ?1");
+    conn.query_row(&sql, rusqlite::params![id], map_device_row).ok()
 }
 
 #[tauri::command]
@@ -692,6 +759,60 @@ fn finding_accept(
 }
 
 // ---------------------------------------------------------------------------
+// Terminal
+// ---------------------------------------------------------------------------
+
+/// Abre uma sessão e devolve o id. A saída chega pelo evento `pty:output`.
+///
+/// A abertura é registrada em auditoria com o tipo e o alvo. As teclas
+/// digitadas NUNCA são registradas: um terminal captura senha, e gravar isso
+/// transformaria a trilha de auditoria num arquivo de credenciais.
+#[cfg(feature = "terminal")]
+#[tauri::command]
+fn pty_open(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    spec: pty::SessionSpec,
+    rows: u16,
+    cols: u16,
+) -> Result<String, String> {
+    let id = pty::open(&app, &state.pty, spec, rows, cols)?;
+    if let Ok(conn) = state.conn() {
+        let _ = conn.execute(
+            "INSERT INTO audit_log (at, actor, action, target_type, target_id)
+             VALUES (unixepoch(), ?1, 'terminal.open', 'session', ?2)",
+            rusqlite::params![actor(), id],
+        );
+    }
+    Ok(id)
+}
+
+#[cfg(feature = "terminal")]
+#[tauri::command]
+fn pty_write(state: State<'_, AppState>, id: String, data: String) -> Result<(), String> {
+    pty::write(&state.pty, &id, &data)
+}
+
+#[cfg(feature = "terminal")]
+#[tauri::command]
+fn pty_resize(state: State<'_, AppState>, id: String, rows: u16, cols: u16) -> Result<(), String> {
+    pty::resize(&state.pty, &id, rows, cols)
+}
+
+#[cfg(feature = "terminal")]
+#[tauri::command]
+fn pty_close(state: State<'_, AppState>, id: String) {
+    pty::close(&state.pty, &id);
+}
+
+/// Informa se o binário foi compilado com o terminal. A interface esconde o
+/// painel quando não, em vez de mostrar botão que devolve erro.
+#[tauri::command]
+fn terminal_available() -> bool {
+    cfg!(feature = "terminal")
+}
+
+// ---------------------------------------------------------------------------
 // Auxiliares
 // ---------------------------------------------------------------------------
 
@@ -742,6 +863,8 @@ pub fn run() {
 
             app.manage(AppState {
                 db_path: dir.join("sentinel.db"),
+                #[cfg(feature = "terminal")]
+                pty: Arc::new(pty::PtyRegistry::new()),
                 scanning: Arc::new(AtomicBool::new(false)),
                 cancel: Arc::new(AtomicBool::new(false)),
             });
@@ -765,7 +888,27 @@ pub fn run() {
             device_detail,
             findings_list,
             finding_accept,
+            terminal_available,
+            #[cfg(feature = "terminal")]
+            pty_open,
+            #[cfg(feature = "terminal")]
+            pty_write,
+            #[cfg(feature = "terminal")]
+            pty_resize,
+            #[cfg(feature = "terminal")]
+            pty_close,
         ])
+        .on_window_event(|window, event| {
+            // Sem isto, um `ssh` ou um `ping -t` sobrevive ao fechamento do
+            // aplicativo e fica pendurado como processo órfão.
+            #[cfg(feature = "terminal")]
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(state) = window.try_state::<AppState>() {
+                    pty::close_all(&state.pty);
+                }
+            }
+            let _ = (window, event);
+        })
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o SentinelStack");
 }

@@ -30,6 +30,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+# Abstrai ConPTY no Windows e forkpty no Unix. É a biblioteca do WezTerm.
+portable-pty = { version = "0.8", optional = true }
 
 # ATENÇÃO: [features] fica no FIM do arquivo.
 #
@@ -37,7 +40,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # [dependencies] engole todas as dependências seguintes e o Cargo reclama
 # "invalid type: map, expected a sequence", porque feature tem que ser lista.
 [features]
-default = ["raw-socket"]
+default = ["raw-socket", "terminal"]
 # Repassa para a core. Build sem isto abre o app em modo limitado, sem exigir
 # o SDK do Npcap no Windows.
 raw-socket = ["sentinel-core/raw-socket"]
+# Terminal embutido. Ligado por padrão no desktop.
+#
+# É execução de comando arbitrário: inofensivo num aplicativo local, onde o
+# usuário já tem shell na máquina, e perigoso no dia em que alguma versão
+# disso rodar dentro da rede de um cliente. Compilar sem a feature remove o
+# código do binário, em vez de depender de alguém lembrar de desabilitar.
+terminal = ["portable-pty"]
