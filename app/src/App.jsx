@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Radar, Server, Network, AlertTriangle, GitCompareArrows, Settings2,
@@ -10,6 +10,12 @@ import { useSentinel, PHASE_LABEL } from "./lib/useSentinel";
 import { useTerminal } from "./lib/useTerminal";
 import TerminalPanel, { DeviceTerminalActions } from "./components/TerminalPanel";
 import NetworkMap from "./components/NetworkMap";
+import Dashboard from "./components/Dashboard";
+import { ScanBanner } from "./components/ScanProgress";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { useToast } from "./lib/toast";
+import { useDialog } from "./lib/dialog";
+import { SkeletonDeviceList, SkeletonList, SkeletonDashboard } from "./components/Skeleton";
 
 /* ------------------------------------------------------------------ */
 /*  Tokens                                                             */
@@ -130,113 +136,6 @@ function Empty({ icon: Icon = Inbox, title, hint, action }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Visão geral                                                        */
-/* ------------------------------------------------------------------ */
-function Overview({ devices, changes, findings, go, onScan }) {
-  if (devices.length === 0) {
-    return (
-      <Panel>
-        <Empty
-          icon={Radar}
-          title="Nenhuma varredura ainda"
-          hint="Clique em Escanear rede para descobrir o que está conectado. A primeira varredura leva de 30 a 60 segundos."
-          action={
-            <button onClick={() => onScan()} className="rounded-md px-3.5 h-9 text-sm font-medium mt-1"
-              style={{ ...sans, background: C.cyan, color: "#06090F" }}>
-              Escanear rede
-            </button>
-          }
-        />
-      </Panel>
-    );
-  }
-
-  const online = devices.filter((d) => d.missCount === 0).length;
-  const crit = findings.filter((f) => f.severity === "critical");
-  const unseen = changes.filter((c) => !c.acknowledged);
-  const counts = Object.keys(SEV).map((k) => ({ k, n: findings.filter((f) => f.severity === k).length }));
-  const max = Math.max(...counts.map((c) => c.n), 1);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-4 gap-4">
-        <Metric label="Dispositivos ativos" value={online} sub={`${devices.length - online} ausente(s)`} accent={C.cyan} />
-        <Metric label="Achados críticos" value={crit.length} sub="exigem ação hoje" accent={SEV.critical.color} />
-        <Metric label="Achados abertos" value={findings.length} sub="total em toda a rede" accent={C.purple} />
-        <Metric label="Mudanças não vistas" value={unseen.length} sub="desde a última visita" accent={C.ok} />
-      </div>
-
-      {crit.length > 0 && (
-        <div className="rounded-lg p-4 flex items-start gap-3"
-          style={{ background: "#FF4D6D12", border: `1px solid ${SEV.critical.color}44` }}>
-          <ShieldAlert size={18} style={{ color: SEV.critical.color }} className="mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium" style={{ ...sans, color: C.text }}>
-              {crit.length} {crit.length === 1 ? "problema crítico" : "problemas críticos"} nesta rede
-            </p>
-            <button onClick={() => go("findings")} className="mt-2 inline-flex items-center gap-1 text-sm"
-              style={{ ...sans, color: SEV.critical.color }}>
-              Ver os achados <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2">
-          <Panel title="Mudanças recentes"
-            action={<button onClick={() => go("changes")} className="text-xs" style={{ ...sans, color: C.cyan }}>Ver tudo</button>}
-            pad={false}>
-            {unseen.length === 0 && (
-              <div className="px-4 py-8 text-center">
-                <p className="text-sm" style={{ ...sans, color: C.faint }}>Nada mudou desde a última varredura.</p>
-              </div>
-            )}
-            {unseen.slice(0, 6).map((c) => (
-              <button key={c.id} onClick={() => go("changes")}
-                className="w-full flex items-center gap-3 px-4 h-14 text-left"
-                style={{ borderBottom: `1px solid ${C.lineSoft}` }}>
-                <SevDot sev={c.severity} />
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm" style={{ ...sans, color: C.text }}>{CHANGE_LABEL[c.changeType] || c.changeType}</span>
-                  <span className="text-sm ml-2" style={{ ...mono, color: C.dim }}>{c.deviceIp || c.deviceLabel || ""}</span>
-                  <p className="text-xs truncate" style={{ ...sans, color: C.faint }}>{c.after || ""}</p>
-                </div>
-                <span className="text-xs shrink-0" style={{ ...sans, color: C.faint }}>{ago(c.detectedAt)}</span>
-              </button>
-            ))}
-          </Panel>
-        </div>
-
-        <Panel title="Achados por severidade">
-          <div className="flex flex-col gap-3">
-            {counts.map(({ k, n }) => (
-              <div key={k} className="flex items-center gap-3">
-                <span className="text-xs w-14 shrink-0" style={{ ...sans, color: C.dim }}>{SEV[k].label}</span>
-                <div className="flex-1 h-1.5 rounded-full" style={{ background: C.raised }}>
-                  <div className="h-full rounded-full" style={{ width: `${(n / max) * 100}%`, background: SEV[k].color }} />
-                </div>
-                <span className="text-sm w-5 text-right" style={{ ...mono, color: C.text }}>{n}</span>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </div>
-    </div>
-  );
-}
-
-function Metric({ label, value, sub, accent }) {
-  return (
-    <div className="rounded-lg p-4" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-      <p className="text-xs" style={{ ...sans, color: C.faint }}>{label}</p>
-      <p className="mt-2" style={{ ...mono, color: accent, fontSize: 30, lineHeight: 1, fontWeight: 500 }}>{value}</p>
-      <p className="text-xs mt-2" style={{ ...sans, color: C.faint }}>{sub}</p>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Dispositivos                                                       */
 /* ------------------------------------------------------------------ */
 function Devices({ devices, onOpen, scanning, onScan }) {
@@ -346,6 +245,7 @@ function Devices({ devices, onOpen, scanning, onScan }) {
 /*  Detalhe                                                            */
 /* ------------------------------------------------------------------ */
 function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, onOpenTerminal }) {
+  const dialog = useDialog();
   const [tab, setTab] = useState("portas");
   const [detail, setDetail] = useState(null);
   const [err, setErr] = useState(null);
@@ -391,8 +291,14 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
               <Field label="Tipo" value={KIND_LABEL[device.kind] || device.kind} sans />
             </div>
           </div>
-          <button onClick={() => {
-            const nome = window.prompt("Nome do dispositivo", device.label || "");
+          <button onClick={async () => {
+            const nome = await dialog.prompt({
+              title: "Renomear dispositivo",
+              label: "Nome do dispositivo",
+              initial: device.label || "",
+              placeholder: "ex.: Servidor de arquivos",
+              confirmLabel: "Salvar",
+            });
             if (nome) onRename(device.id, nome);
           }} className="rounded-md px-3 h-8 text-sm shrink-0"
             style={{ ...sans, color: C.text, background: C.raised, border: `1px solid ${C.line}` }}>
@@ -428,7 +334,7 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
       </div>
 
       {err && <Panel><p className="text-sm" style={{ ...sans, color: SEV.high.color }}>{err}</p></Panel>}
-      {!detail && !err && <Panel><p className="text-sm" style={{ ...sans, color: C.faint }}>Carregando…</p></Panel>}
+      {!detail && !err && <SkeletonList rows={5} />}
 
       {detail && tab === "portas" && (
         <Panel pad={false}>
@@ -611,6 +517,7 @@ function Field({ label, value, sans: isSans }) {
 /*  Achados                                                            */
 /* ------------------------------------------------------------------ */
 function FindingCard({ finding, rule, affected, onAccept }) {
+  const dialog = useDialog();
   const [open, setOpen] = useState(false);
   // Regra ausente do catálogo indica versão de banco mais nova que o binário.
   // Degrada mostrando o id em vez de quebrar a tela.
@@ -671,8 +578,15 @@ function FindingCard({ finding, rule, affected, onAccept }) {
           )}
           {onAccept && finding && (
             <div className="flex gap-2">
-              <button onClick={() => {
-                const motivo = window.prompt("Por que aceitar este risco?");
+              <button onClick={async () => {
+                const motivo = await dialog.prompt({
+                  title: "Aceitar risco",
+                  label: "Justificativa (fica registrada na auditoria)",
+                  placeholder: "ex.: switch legado, troca no orçamento de 2027",
+                  multiline: true,
+                  required: true,
+                  confirmLabel: "Aceitar risco",
+                });
                 if (motivo) onAccept(finding.id, motivo);
               }} className="inline-flex items-center gap-1.5 rounded-md px-2.5 h-8 text-sm"
                 style={{ ...sans, background: C.raised, color: C.dim, border: `1px solid ${C.line}` }}>
@@ -841,8 +755,12 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
   const total = Object.keys(rules).length;
   const off = Object.values(rules).filter((r) => !r.enabled).length;
 
+  // Grade de duas colunas: a interface e as permissões lado a lado, catálogo e
+  // segurança abaixo. Preenche a largura em vez de deixar um vão preto à
+  // direita, e mantém as linhas curtas o suficiente para leitura.
   return (
-    <div className="flex flex-col gap-4" style={{ maxWidth: 760 }}>
+    <div className="grid grid-cols-2 gap-4 items-start" style={{ maxWidth: 1100 }}>
+      <div className="col-span-2">
       <Panel title="Interfaces de rede">
         <div className="flex flex-col gap-1">
           {(interfaces || []).filter((i) => !i.isLoopback).map((i) => (
@@ -879,6 +797,7 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
           </p>
         </div>
       </Panel>
+      </div>
 
       <Panel title="Permissões do sistema"
         action={
@@ -978,6 +897,7 @@ export default function App() {
   } = useSentinel();
 
   const term = useTerminal();
+  const toast = useToast();
 
   const [view, setView] = useState("overview");
   const [selected, setSelected] = useState(null);
@@ -985,15 +905,59 @@ export default function App() {
 
   const open = (d) => { setSelected(d); setView("device"); };
 
+  // Avisa quando a varredura falha, além do texto na barra.
+  const prevError = useRef(null);
+  useEffect(() => {
+    if (scan.error && scan.error !== prevError.current) {
+      toast.error(`Falha na varredura: ${scan.error}`);
+    }
+    prevError.current = scan.error;
+  }, [scan.error, toast]);
+
   const doExport = async () => {
     if (devices.length === 0) return;
     setExportState("working");
     try {
       const r = await api.exportEvidence(cidr || "rede local");
       setExportState(r);
+      toast.success("Evidência exportada com selo de integridade.");
     } catch (e) {
       // Cancelar o diálogo cai aqui; não é erro que mereça alarde.
-      setExportState(String(e).includes("cancelada") ? null : { error: String(e) });
+      if (String(e).includes("cancelada")) {
+        setExportState(null);
+      } else {
+        setExportState({ error: String(e) });
+        toast.error("Não foi possível exportar a evidência.");
+      }
+    }
+  };
+
+  // Wrappers com feedback: a ação continua no hook, o toast confirma que
+  // aconteceu. Sem isto, renomear e aceitar acontecem em silêncio e parecem
+  // não ter funcionado.
+  const renameWithToast = async (id, name) => {
+    try {
+      await renameDevice(id, name);
+      toast.success(`Dispositivo renomeado para "${name}".`);
+    } catch {
+      toast.error("Não foi possível renomear o dispositivo.");
+    }
+  };
+
+  const acceptWithToast = async (id, reason) => {
+    try {
+      await acceptFinding(id, reason);
+      toast.success("Risco aceito e registrado.");
+    } catch {
+      toast.error("Não foi possível aceitar o risco.");
+    }
+  };
+
+  const ackWithToast = async (id) => {
+    try {
+      await ackChange(id);
+    } catch {
+      toast.error("Não foi possível marcar como vista.");
     }
   };
 
@@ -1144,26 +1108,34 @@ export default function App() {
               // rolagem do container brigaria com ele.
               overflow: view === "map" ? "hidden" : "auto",
             }}>
+          {/* Banner de varredura em andamento, presente em toda tela menos a
+              Visão geral (lá o próprio dashboard já mostra o progresso). Assim
+              a varredura nunca é uma caixa preta, mesmo navegando para outra
+              aba no meio dela. */}
+          {scan.running && view !== "overview" && view !== "device" && (
+            <ScanBanner phase={scan.phase} percent={scan.percent} />
+          )}
+
           {loading ? (
-            <Panel><p className="text-sm" style={{ ...sans, color: C.faint }}>Abrindo o banco…</p></Panel>
+            view === "devices" ? <SkeletonDeviceList /> : <SkeletonDashboard />
           ) : (
-            <>
+            <ErrorBoundary scope="esta tela" resetKey={view}>
               {view === "overview" && (
-                <Overview devices={devices} changes={changes} findings={findings}
-                  go={setView} onScan={startScan} />
+                <Dashboard devices={devices} changes={changes} findings={findings}
+                  scan={scan} go={setView} onScan={startScan} />
               )}
               {view === "devices" && (
                 <Devices devices={devices} onOpen={open} scanning={scan.running} onScan={startScan} />
               )}
               {view === "device" && selected && (
                 <DeviceDetail device={selected} rules={rules} loadDetail={loadDetail}
-                  onBack={() => setView("devices")} onRename={renameDevice} onAccept={acceptFinding}
+                  onBack={() => setView("devices")} onRename={renameWithToast} onAccept={acceptWithToast}
                   onOpenTerminal={term.available
                     ? async (spec) => { await term.openSession(spec); setView("terminal"); }
                     : null} />
               )}
-              {view === "findings" && <Findings findings={findings} rules={rules} onAccept={acceptFinding} />}
-              {view === "changes" && <Changes changes={changes} onAck={ackChange} />}
+              {view === "findings" && <Findings findings={findings} rules={rules} onAccept={acceptWithToast} />}
+              {view === "changes" && <Changes changes={changes} onAck={ackWithToast} />}
               {view === "map" && (
                 devices.length === 0
                   ? <Panel><Empty icon={Network} title="Sem dados para desenhar o mapa"
@@ -1174,7 +1146,7 @@ export default function App() {
                 <SettingsView caps={caps} iface={iface} cidr={cidr} rules={rules}
                   interfaces={interfaces} onRecheck={recheckCaps} onSelect={selectInterface} />
               )}
-            </>
+            </ErrorBoundary>
           )}
           </main>
 

@@ -40,3 +40,9 @@ button { user-select: none; }
 ::-webkit-scrollbar-track { background: #0F141D; }
 ::-webkit-scrollbar-thumb { background: #222C3C; border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: #2C3850; }
+
+/* Brilho deslizante dos skeletons de carregamento. */
+@keyframes skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

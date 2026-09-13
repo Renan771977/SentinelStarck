@@ -13,5 +13,6 @@ pub mod rules;
 pub mod scan;
 pub mod service_diff;
 pub mod store;
+pub mod telemetry;
 
 pub use model::{Capabilities, Device, Observation, ScanConfig, ScanEvent};

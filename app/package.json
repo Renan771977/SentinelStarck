@@ -21,7 +21,9 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "@xterm/xterm": "^5.5.0",
-    "@xterm/addon-fit": "^0.10.0"
+    "@xterm/addon-fit": "^0.10.0",
+    "uplot": "^1.6.31",
+    "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

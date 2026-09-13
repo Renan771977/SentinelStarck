@@ -109,6 +109,15 @@ export interface TlsInfo {
   signatureAlgorithm: string | null;
 }
 
+export interface TelemetryPoint {
+  at: number;
+  targetId: number;
+  kind: string;
+  label: string | null;
+  /** Latência em ms. null = amostra perdida. */
+  rttMs: number | null;
+}
+
 export type HintKind = "shell" | "browser" | "external" | "info";
 
 export interface ConnectHint {
@@ -259,6 +268,10 @@ export const api = {
    * Exporta a evidência selada. Abre diálogo de pasta, grava manifesto .json e
    * relatório .html, retorna o hash e os caminhos.
    */
+  /** Histórico de telemetria dos últimos N minutos, para o gráfico abrir cheio. */
+  telemetryHistory: (minutes: number) =>
+    invoke<TelemetryPoint[]>("telemetry_history", { minutes }),
+
   exportEvidence: (scope: string) =>
     invoke<{
       hash: string;

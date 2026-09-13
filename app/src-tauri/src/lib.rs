@@ -786,6 +786,128 @@ fn finding_accept(
 }
 
 // ---------------------------------------------------------------------------
+// Telemetria
+// ---------------------------------------------------------------------------
+
+/// Ponto de telemetria emitido para o dashboard.
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct TelemetryPoint {
+    at: i64,
+    target_id: i64,
+    kind: String,
+    label: Option<String>,
+    rtt_ms: Option<f64>,
+}
+
+async fn telemetry_loop(app: AppHandle, db_path: std::path::PathBuf) {
+    use std::time::Duration;
+
+    // Intervalo entre rodadas. 2s dá um gráfico fluido sem pesar a rede nem o
+    // banco. Cada rodada mede todos os alvos em paralelo.
+    let interval = Duration::from_secs(2);
+    // A cada quantas rodadas consolidar o cru em rollup e podar. 30 rodadas =
+    // ~1 min, alinhado ao bucket de 60s.
+    let mut round = 0u64;
+
+    loop {
+        tokio::time::sleep(interval).await;
+
+        let Ok(conn) = store::open(&db_path) else { continue };
+
+        // Gateway detectado da interface em uso, para criar o alvo padrão.
+        let gateway = detect_gateway(&conn);
+
+        let targets = match sentinel_core::telemetry::active_targets(&conn, gateway) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        if targets.is_empty() {
+            continue;
+        }
+
+        // Mede todos em paralelo.
+        let mut handles = Vec::new();
+        for t in &targets {
+            let t = t.clone();
+            handles.push(tokio::spawn(async move {
+                sentinel_core::telemetry::probe_once(&t, Duration::from_millis(1500)).await
+            }));
+        }
+
+        let mut points = Vec::new();
+        for (t, h) in targets.iter().zip(handles) {
+            if let Ok(sample) = h.await {
+                let _ = sentinel_core::telemetry::store_sample(&conn, &sample);
+                points.push(TelemetryPoint {
+                    at: sample.at,
+                    target_id: sample.target_id,
+                    kind: t.kind.clone(),
+                    label: t.label.clone(),
+                    rtt_ms: sample.rtt_ms,
+                });
+            }
+        }
+
+        let _ = app.emit("telemetry:sample", &points);
+
+        // Consolidação periódica.
+        round += 1;
+        if round % 30 == 0 {
+            let cutoff = sentinel_core::model::now() - 120; // mantém 2 min de cru
+            let _ = sentinel_core::telemetry::rollup_minute(&conn, cutoff);
+        }
+    }
+}
+
+/// Gateway da rede, lido da rota padrão via a interface em uso.
+///
+/// Fallback simples: primeiro IP .1 da faixa monitorada. Um dia isto lê a rota
+/// real; por ora, o .1 acerta na esmagadora maioria das redes de PME.
+fn detect_gateway(conn: &rusqlite::Connection) -> Option<std::net::IpAddr> {
+    // Se já existe um alvo gateway, usa o dele.
+    let existing: Option<String> = conn
+        .query_row("SELECT address FROM probe_target WHERE kind='gateway' LIMIT 1", [], |r| r.get(0))
+        .ok();
+    if let Some(a) = existing {
+        return a.parse().ok();
+    }
+    // Senão, deriva do primeiro dispositivo tipo router conhecido.
+    conn.query_row(
+        "SELECT a.value FROM device d
+           JOIN device_address a ON a.device_id = d.id AND a.kind='ip' AND a.is_current=1
+          WHERE d.kind='router' LIMIT 1",
+        [], |r| r.get::<_, String>(0),
+    ).ok().and_then(|s| s.parse().ok())
+}
+
+/// Histórico recente de telemetria, para o dashboard preencher o gráfico ao
+/// abrir (antes de os eventos ao vivo chegarem).
+#[tauri::command]
+fn telemetry_history(state: State<'_, AppState>, minutes: i64) -> Result<Vec<TelemetryPoint>, String> {
+    let conn = state.conn()?;
+    let since = sentinel_core::model::now() - minutes * 60;
+
+    let mut stmt = conn.prepare(
+        "SELECT s.at, s.target_id, t.kind, t.label, s.rtt_ms
+           FROM probe_sample s JOIN probe_target t ON t.id = s.target_id
+          WHERE s.at >= ?1 ORDER BY s.at",
+    ).map_err(|e| e.to_string())?;
+
+    let rows = stmt.query_map(rusqlite::params![since], |r| {
+        Ok(TelemetryPoint {
+            at: r.get(0)?,
+            target_id: r.get(1)?,
+            kind: r.get(2)?,
+            label: r.get(3)?,
+            rtt_ms: r.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    rows.collect::<Result<_,_>>().map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Terminal
 // ---------------------------------------------------------------------------
 
@@ -974,6 +1096,7 @@ pub fn run() {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
 
+            let db_for_telemetry = dir.join("sentinel.db");
             app.manage(AppState {
                 db_path: dir.join("sentinel.db"),
                 #[cfg(feature = "terminal")]
@@ -981,6 +1104,28 @@ pub fn run() {
                 scanning: Arc::new(AtomicBool::new(false)),
                 cancel: Arc::new(AtomicBool::new(false)),
             });
+
+            // Laço de telemetria em thread dedicada.
+            //
+            // Mede a saúde da rede a cada 2s e emite `telemetry:sample` para o
+            // dashboard. É o que torna o gráfico ao vivo verdadeiro. Thread
+            // própria com runtime de thread única, porque a conexão do rusqlite
+            // não é Send — mesma disciplina da varredura.
+            let app_tel = app.handle().clone();
+            std::thread::Builder::new()
+                .name("sentinel-telemetry".into())
+                .spawn(move || {
+                    let rt = match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        Ok(rt) => rt,
+                        Err(_) => return,
+                    };
+                    rt.block_on(telemetry_loop(app_tel, db_for_telemetry));
+                })
+                .ok();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1004,6 +1149,7 @@ pub fn run() {
             terminal_available,
             open_external,
             export_evidence,
+            telemetry_history,
             #[cfg(feature = "terminal")]
             pty_open,
             #[cfg(feature = "terminal")]

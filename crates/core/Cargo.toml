@@ -35,11 +35,15 @@ regex = "1"
 sha2 = "0.10"
 # Timestamp legível no manifesto de evidência (ISO 8601 com fuso).
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# SNMP v1/v2c em Rust puro, sem depender de net-snmp em C. Opcional: quem não
+# quer SNMP compila sem a feature `snmp` e o módulo vira stub.
+csnmp = { version = "0.5", optional = true }
 
 
 [features]
-default = ["raw-socket", "tls-inspect"]
+default = ["raw-socket", "tls-inspect", "snmp"]
 # Isola tudo que exige socket raw. Build sem este recurso compila em ambiente
 # sem libpcap e funciona em modo limitado, o que é útil em CI.
 raw-socket = ["pnet"]
 tls-inspect = ["tokio-rustls", "rustls"]
+snmp = ["csnmp"]

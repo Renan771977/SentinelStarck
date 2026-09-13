@@ -5,5 +5,6 @@ pub mod iface;
 pub mod oui;
 pub mod ports;
 pub mod resolve;
+pub mod snmp;
 pub mod tls_fixtures;
 pub mod tls;
