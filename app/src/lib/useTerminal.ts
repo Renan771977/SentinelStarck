@@ -10,7 +10,14 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { pty, type Session, type SessionSpec } from "./terminal";
 
-type OpenRequest = SessionSpec & { label?: string };
+type OpenRequest = SessionSpec & {
+  label?: string;
+  /**
+   * Comando a digitar assim que o shell abrir, SEM executar. A pessoa vê o
+   * comando pronto na linha e confirma com Enter. Só faz sentido com um shell.
+   */
+  prefill?: string;
+};
 
 export function useTerminal() {
   const [available, setAvailable] = useState(false);
@@ -36,14 +43,21 @@ export function useTerminal() {
 
   const openSession = useCallback(async (req: OpenRequest) => {
     setError(null);
-    const { label, ...spec } = req;
+    const { label, prefill, ...spec } = req;
     try {
       const id = await pty.open(spec as SessionSpec, 24, 100);
       setSessions((ss) => [...ss, { id, kind: spec.kind, label }]);
+
+      // Digita o comando no shell recém-aberto, sem Enter. Um pequeno atraso
+      // dá tempo de o shell imprimir o prompt antes; sem ele, o comando
+      // apareceria antes do "PS C:\>" e ficaria bagunçado.
+      if (prefill) {
+        // O prompt do PowerShell inicializado com -Command demora um pouco
+        // mais; 600ms evita o comando aparecer antes do "PS C:\>".
+        window.setTimeout(() => { pty.write(id, prefill).catch(() => {}); }, 600);
+      }
       return id;
     } catch (e) {
-      // Falha típica: `ssh` ou `telnet` não instalado. A mensagem do Rust já
-      // diz qual comando faltou.
       setError(String(e));
       return null;
     }

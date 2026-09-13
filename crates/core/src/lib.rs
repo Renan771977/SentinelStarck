@@ -5,6 +5,7 @@
 //! fronteira inteira.
 
 pub mod diff;
+pub mod evidence;
 pub mod identity;
 pub mod model;
 pub mod net;

@@ -132,6 +132,10 @@ pub struct ServiceInfo {
     pub port: u16,
     pub service_name: Option<String>,
     pub banner: Option<String>,
+    /// JSON com emissor, validade, chave e SAN, quando a porta fala TLS.
+    pub tls_info: Option<String>,
+    /// Comandos de conexão prontos, montados no núcleo conforme a porta.
+    pub connect_hints: Vec<sentinel_core::net::connect_hint::ConnectHint>,
 }
 
 #[derive(Serialize)]
@@ -632,23 +636,46 @@ fn device_detail(state: State<'_, AppState>, id: String) -> Result<DeviceDetail,
         .filter_map(Result::ok)
         .collect();
 
+    // IP atual do dispositivo, para montar os comandos de conexão.
+    let primary_ip: Option<std::net::IpAddr> = conn
+        .query_row(
+            "SELECT value FROM device_address
+              WHERE device_id = ?1 AND kind='ip' AND is_current=1
+              ORDER BY last_seen DESC LIMIT 1",
+            rusqlite::params![&id],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|s| s.parse().ok());
+
     let mut stmt = conn
         .prepare(
-            "SELECT protocol, port, service_name, banner FROM device_service
+            "SELECT protocol, port, service_name, banner, tls_info FROM device_service
               WHERE device_id = ?1 AND closed_at IS NULL ORDER BY port",
         )
         .map_err(|e| e.to_string())?;
     let services = stmt
         .query_map(rusqlite::params![&id], |r| {
-            Ok(ServiceInfo {
-                protocol: r.get(0)?,
-                port: r.get(1)?,
-                service_name: r.get(2)?,
-                banner: r.get(3)?,
-            })
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, u16>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, Option<String>>(4)?,
+            ))
         })
         .map_err(|e| e.to_string())?
         .filter_map(Result::ok)
+        .map(|(protocol, port, service_name, banner, tls_info)| {
+            let connect_hints = match primary_ip {
+                Some(ip) => sentinel_core::net::connect_hint::hints_for(
+                    ip, port, banner.as_deref(), tls_info.is_some(),
+                    sentinel_core::net::connect_hint::Platform::current(),
+                ),
+                None => Vec::new(),
+            };
+            ServiceInfo { protocol, port, service_name, banner, tls_info, connect_hints }
+        })
         .collect();
 
     // A view v_open_finding já filtra resolvido, aceito e suprimido.
@@ -805,6 +832,92 @@ fn pty_close(state: State<'_, AppState>, id: String) {
     pty::close(&state.pty, &id);
 }
 
+/// Exporta a evidência selada: um manifesto .json (o artefato verificável) e
+/// um relatório .html (a apresentação legível). Retorna o hash e os caminhos.
+///
+/// O selo é o SHA-256 do manifesto. A gravação é registrada em auditoria com o
+/// hash, para haver rastro de quando cada evidência foi emitida.
+#[tauri::command]
+async fn export_evidence(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    scope: String,
+) -> Result<serde_json::Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let evidence = {
+        let conn = state.conn()?;
+        sentinel_core::evidence::collect(&conn, &scope, env!("CARGO_PKG_VERSION"))
+            .map_err(|e| e.to_string())?
+    };
+
+    let hash = evidence.header.content_sha256.clone();
+    let stamp = chrono_compact();
+    let base = format!("sentinelstack-evidencia-{stamp}");
+
+    // Diálogo para escolher a PASTA. Gravamos dois arquivos com o mesmo nome
+    // base, então pedir pasta é mais natural que pedir arquivo.
+    let folder = app
+        .dialog()
+        .file()
+        .set_title("Escolha onde salvar a evidência")
+        .blocking_pick_folder()
+        .ok_or("exportação cancelada")?;
+
+    let dir = folder
+        .into_path()
+        .map_err(|e| format!("caminho inválido: {e}"))?;
+
+    let json = sentinel_core::evidence::to_manifest_json(&evidence).map_err(|e| e.to_string())?;
+    let html = sentinel_core::evidence::to_report_html(&evidence);
+
+    let json_path = dir.join(format!("{base}.json"));
+    let html_path = dir.join(format!("{base}.html"));
+
+    std::fs::write(&json_path, json).map_err(|e| format!("gravar manifesto: {e}"))?;
+    std::fs::write(&html_path, html).map_err(|e| format!("gravar relatório: {e}"))?;
+
+    if let Ok(conn) = state.conn() {
+        let _ = conn.execute(
+            "INSERT INTO audit_log (at, actor, action, target_type, target_id, detail)
+             VALUES (unixepoch(), ?1, 'evidence.export', 'evidence', ?2, ?3)",
+            rusqlite::params![actor(), hash, scope],
+        );
+    }
+
+    Ok(serde_json::json!({
+        "hash": hash,
+        "manifestPath": json_path.to_string_lossy(),
+        "reportPath": html_path.to_string_lossy(),
+        "deviceCount": evidence.body.summary.device_count,
+        "findingCount": evidence.body.summary.finding_count,
+    }))
+}
+
+fn chrono_compact() -> String {
+    chrono::Local::now().format("%Y%m%d-%H%M%S").to_string()
+}
+
+/// Abre uma URL no navegador padrão do sistema.
+///
+/// Só http e https. Sem allowlist, um item malicioso vindo de um dispositivo
+/// (um banner, um SAN de certificado) poderia induzir a abertura de `file://`
+/// ou de um esquema que dispara outro programa. O navegador é do sistema de
+/// propósito: não renderizamos HTML de dispositivo dentro da nossa janela.
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    let ok = url.starts_with("http://") || url.starts_with("https://");
+    if !ok {
+        return Err("apenas http e https são permitidos".into());
+    }
+    // Validar como URL de verdade barra tentativa de embutir espaço, aspas ou
+    // caractere de controle no host.
+    if url.contains(|c: char| c.is_control() || c == '"' || c == '\'' || c == ' ') {
+        return Err("URL inválida".into());
+    }
+    open::that(&url).map_err(|e| format!("não foi possível abrir o navegador: {e}"))
+}
+
 /// Informa se o binário foi compilado com o terminal. A interface esconde o
 /// painel quando não, em vez de mostrar botão que devolve erro.
 #[tauri::command]
@@ -889,6 +1002,8 @@ pub fn run() {
             findings_list,
             finding_accept,
             terminal_available,
+            open_external,
+            export_evidence,
             #[cfg(feature = "terminal")]
             pty_open,
             #[cfg(feature = "terminal")]

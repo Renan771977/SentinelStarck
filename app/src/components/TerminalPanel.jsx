@@ -17,13 +17,17 @@ const THEME = {
   foreground: "#E8ECF4",
   cursor: "#00C2FF",
   cursorAccent: "#0B0F16",
-  selectionBackground: "#00C2FF33",
+  // Seleção discreta: com opacidade alta, a movimentação de cursor durante o
+  // carregamento de um comando pintava a tela inteira de azul.
+  selectionBackground: "#00C2FF22",
+  selectionInactiveBackground: "#00C2FF14",
   black: "#0B0F16", red: "#FF4D6D", green: "#35D07F", yellow: "#FFC94D",
   blue: "#4DA8FF", magenta: "#7C3AED", cyan: "#00C2FF", white: "#C9D1DE",
   brightBlack: "#6B7688", brightRed: "#FF7A90", brightGreen: "#5FE3A1",
   brightYellow: "#FFD97A", brightBlue: "#7CC3FF", brightMagenta: "#A47BF5",
   brightCyan: "#5FD8FF", brightWhite: "#F2F5FA",
 };
+
 
 const KIND_LABEL = {
   shell: "Shell",
@@ -191,7 +195,7 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
         </button>
       </header>
 
-      <div className="flex-1 min-h-0 relative">
+      <div className="flex-1 min-h-0 relative" style={{ background: "#0B0F16" }}>
         {sessions.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
             <p className="text-sm" style={{ ...sans, color: C.dim }}>Nenhuma sessão aberta</p>
@@ -206,9 +210,13 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
           <div key={s.id}
             ref={(el) => { if (el) hostRefs.current.set(s.id, el); else hostRefs.current.delete(s.id); }}
             className="absolute inset-0 px-2 py-1"
-            // Aba oculta continua montada: destruir perderia o histórico da
-            // sessão, que é o que a pessoa volta para reler.
-            style={{ visibility: active === s.id ? "visible" : "hidden" }}
+            style={{
+              visibility: active === s.id ? "visible" : "hidden",
+              // Fundo fixo igual ao do tema do xterm. Sem isto, durante o
+              // resize o host fica transparente por um instante e o WebView
+              // pinta a cor de seleção do sistema — era o "tudo azul".
+              background: "#0B0F16",
+            }}
           />
         ))}
       </div>

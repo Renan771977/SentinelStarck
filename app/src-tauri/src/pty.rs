@@ -93,9 +93,30 @@ impl SessionSpec {
         let cmd = match self {
             Self::Shell => {
                 if windows {
-                    CommandBuilder::new("powershell.exe")
+                    let mut c = CommandBuilder::new("powershell.exe");
+                    c.arg("-NoLogo");
+                    // -NoExit mantém o shell aberto após rodar o comando de
+                    // inicialização; o comando desliga a barra de progresso de
+                    // tela cheia, que era o "bloco azul" do Test-NetConnection.
+                    c.arg("-NoExit");
+                    c.arg("-Command");
+                    c.arg("$ProgressPreference='SilentlyContinue'");
+                    c
                 } else {
-                    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+                    // No Kali e derivados o padrão é zsh ou bash. Respeita a
+                    // escolha do usuário via $SHELL; cai para bash e depois sh.
+                    let shell = std::env::var("SHELL")
+                        .ok()
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| {
+                            for candidato in ["/usr/bin/zsh", "/bin/bash", "/bin/sh"] {
+                                if std::path::Path::new(candidato).exists() {
+                                    return Some(candidato.to_string());
+                                }
+                            }
+                            None
+                        })
+                        .unwrap_or_else(|| "/bin/sh".into());
                     CommandBuilder::new(shell)
                 }
             }

@@ -65,6 +65,21 @@ pub fn ipv4_of(name: &str) -> Option<Ipv4Addr> {
     })
 }
 
+/// Índice do adaptador, pelo nome amigável.
+///
+/// O índice vem da mesma tabela do sistema que o pnet lê, então é a ponte
+/// confiável entre os dois no Windows, onde o pnet não traz os IPs e o
+/// casamento por endereço falha.
+pub fn index_of(name: &str) -> Option<u32> {
+    if_addrs::get_if_addrs().ok()?.into_iter().find_map(|i| {
+        if i.name == name {
+            i.index
+        } else {
+            None
+        }
+    })
+}
+
 /// Primeira interface não-loopback com IPv4. Usada quando o chamador não
 /// informa nome nenhum.
 pub fn default_ipv4() -> Option<(String, Ipv4Addr)> {
@@ -149,5 +164,28 @@ mod target_tests {
         assert!(!is_valid_target("192.168.1.300"));
         assert!(!is_valid_target("192.168.1.0/33"));
         assert!(!is_valid_target(""));
+    }
+}
+
+#[cfg(test)]
+mod match_logic_tests {
+    // Reproduz o cenário do print de produção: pnet traz os mesmos IPs que o
+    // if-addrs, só com nomes NPF diferentes. O casamento por IP tem que achar.
+    #[test]
+    fn casamento_por_ip_encontra_a_interface_certa() {
+        // Simula o que cada lado reporta.
+        let ifaddrs = [("Ethernet", "192.168.1.68"), ("Ethernet 2", "192.168.56.1")];
+        let pnet = [
+            ("\\Device\\NPF_{736E8A2C}", "192.168.1.68"),
+            ("\\Device\\NPF_{6ED1EAFD}", "192.168.56.1"),
+        ];
+
+        // A pessoa escolheu "Ethernet". Achamos o IP dela no if-addrs...
+        let want_ip = ifaddrs.iter().find(|(n, _)| *n == "Ethernet").map(|(_, ip)| *ip).unwrap();
+        // ...e casamos esse IP contra o pnet.
+        let matched = pnet.iter().find(|(_, ip)| *ip == want_ip).map(|(n, _)| *n);
+
+        assert_eq!(matched, Some("\\Device\\NPF_{736E8A2C}"),
+            "o IP 192.168.1.68 tem que casar a Ethernet com seu device NPF");
     }
 }

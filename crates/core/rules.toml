@@ -1,4 +1,3 @@
-
 # ==========================================================================
 #  SentinelStack — catálogo de regras de risco
 #
@@ -656,7 +655,7 @@ title = "Certificado vence em menos de 30 dias"
 category = "tls"
 base_severity = "low"
 confidence = "confirmed"
-match = { custom = "cert_expiring_soon", days = 30 }
+match = { custom = "cert_expiring_soon" }
 why = """
 O certificado está próximo do vencimento. Expiração em serviço de produção
 costuma virar indisponibilidade fora do horário comercial.

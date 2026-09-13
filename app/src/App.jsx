@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Radar, Server, Network, AlertTriangle, GitCompareArrows, Settings2,
   Search, Play, Square, ShieldAlert, ShieldCheck, Wifi, Router, Printer,
   Monitor, Camera, HardDrive, CircleHelp, ChevronRight, ChevronDown,
-  Check, EyeOff, Clock, Lock, Unlock, Cable, Inbox, TerminalSquare,
+  Check, EyeOff, Clock, Lock, Unlock, Cable, Inbox, TerminalSquare, ArrowUpRight, Copy,
 } from "lucide-react";
 import { useSentinel, PHASE_LABEL } from "./lib/useSentinel";
 import { useTerminal } from "./lib/useTerminal";
@@ -441,12 +442,7 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
                 <span>Porta</span><span>Serviço</span><span>Banner</span>
               </div>
               {detail.services.map((p) => (
-                <div key={`${p.protocol}/${p.port}`} className="grid px-4 h-11 items-center"
-                  style={{ borderBottom: `1px solid ${C.lineSoft}`, gridTemplateColumns: ".4fr .6fr 2fr" }}>
-                  <Mono>{p.port}</Mono>
-                  <span className="text-sm" style={{ ...sans, color: C.dim }}>{p.serviceName || p.protocol}</span>
-                  <Mono dim>{(p.banner || "—").split("\n")[0]}</Mono>
-                </div>
+                <ServiceRow key={`${p.protocol}/${p.port}`} svc={p} ip={device.ip} onOpenTerminal={onOpenTerminal} />
               ))}
             </>
           )}
@@ -495,6 +491,110 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
         </Panel>
       )}
     </div>
+  );
+}
+
+/** Uma porta na tabela de detalhe. Expande certificado TLS quando há, e
+ *  oferece abrir no navegador quando é serviço web. */
+/** Um botão de conexão. Ação depende do tipo: navegador abre a URL, os
+ *  demais copiam o comando para a área de transferência. */
+function ConnectButton({ hint, ip, onOpenTerminal }) {
+  const [copied, setCopied] = useState(false);
+  const warn = !!hint.warning;
+
+  // SSH e Telnet abrem uma SESSÃO dedicada (o processo ssh roda direto). Os
+  // demais shells abrem um PowerShell com o comando já digitado, para a pessoa
+  // conferir antes de executar.
+  const canOpenSession =
+    hint.kind === "shell" && onOpenTerminal &&
+    (hint.command.startsWith("ssh ") || hint.command.startsWith("telnet "));
+
+  const act = () => {
+    if (hint.kind === "browser") {
+      invoke("open_external", { url: hint.command }).catch(() => {});
+      return;
+    }
+    if (canOpenSession) {
+      const isSsh = hint.command.startsWith("ssh ");
+      onOpenTerminal({ kind: isSsh ? "ssh" : "telnet", host: ip, label: ip });
+      return;
+    }
+    // Demais clientes (mysql, redis-cli, smbclient): abre um shell e DIGITA o
+    // comando sem executar. A pessoa confere e aperta Enter. Um clique em vez
+    // de copiar-navegar-colar, sem perder o controle de rodar às cegas.
+    if (onOpenTerminal) {
+      onOpenTerminal({ kind: "shell", label: `${hint.label} · ${ip}`, prefill: hint.command });
+      return;
+    }
+    // Sem terminal disponível (build sem a feature): cai para copiar.
+    navigator.clipboard?.writeText(hint.command).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    }).catch(() => {});
+  };
+
+  const color = warn ? "#FFC94D" : C.cyan;
+  return (
+    <button onClick={act} title={hint.warning || hint.command}
+      className="text-xs rounded px-2 h-6 inline-flex items-center gap-1"
+      style={{ ...sans, color, background: `${color}12`, border: `1px solid ${color}33` }}>
+      {hint.kind === "browser"
+        ? <>{hint.label} <ArrowUpRight size={11} /></>
+        : (canOpenSession || onOpenTerminal)
+          ? <>{hint.label} <TerminalSquare size={11} /></>
+          : copied ? <>Copiado <Check size={11} /></> : <>{hint.label} <Copy size={11} /></>}
+    </button>
+  );
+}
+
+function ServiceRow({ svc, ip, onOpenTerminal }) {
+  const [open, setOpen] = useState(false);
+  const tls = svc.tlsInfo ? JSON.parse(svc.tlsInfo) : null;
+
+  return (
+    <div style={{ borderBottom: `1px solid ${C.lineSoft}` }}>
+      <div className="grid px-4 py-2 items-center"
+        style={{ gridTemplateColumns: ".4fr .6fr 1.4fr auto" }}>
+        <Mono>{svc.port}</Mono>
+        <span className="text-sm flex items-center gap-1.5" style={{ ...sans, color: C.dim }}>
+          {svc.serviceName || svc.protocol}
+          {tls && (
+            <button onClick={() => setOpen(!open)} title="Ver certificado"
+              style={{ color: tls.selfSigned ? "#FFC94D" : C.ok }}>
+              <Lock size={11} />
+            </button>
+          )}
+        </span>
+        <Mono dim>{(svc.banner || (tls ? tls.protocol : "—")).split("\n")[0]}</Mono>
+        <span className="flex justify-end gap-1.5 flex-wrap">
+          {(svc.connectHints || []).map((h, i) => (
+            <ConnectButton key={i} hint={h} ip={ip} onOpenTerminal={onOpenTerminal} />
+          ))}
+        </span>
+      </div>
+
+      {open && tls && (
+        <div className="px-4 pb-3 pt-1 grid gap-y-1.5"
+          style={{ gridTemplateColumns: "auto 1fr", columnGap: 24, paddingLeft: 24 }}>
+          <CertField label="Protocolo" value={tls.protocol} />
+          <CertField label="Emissor" value={tls.issuer} m />
+          <CertField label="Sujeito" value={tls.subject} m />
+          {tls.san?.length > 0 && <CertField label="Nomes (SAN)" value={tls.san.join(", ")} m />}
+          <CertField label="Chave" value={tls.keyType ? `${tls.keyType} ${tls.keyBits || ""} bits` : "—"} />
+          <CertField label="Válido até" value={dateOf(tls.notAfter)} />
+          <CertField label="Autoassinado" value={tls.selfSigned ? "sim" : "não"} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CertField({ label, value, m }) {
+  return (
+    <>
+      <span className="text-xs" style={{ ...sans, color: C.faint }}>{label}</span>
+      <span className="text-xs truncate" style={{ ...(m ? mono : sans), color: C.dim }}>{value || "—"}</span>
+    </>
   );
 }
 
@@ -677,6 +777,66 @@ function Changes({ changes, onAck }) {
 /* ------------------------------------------------------------------ */
 /*  Configurações                                                      */
 /* ------------------------------------------------------------------ */
+/** Confirmação do export, com o selo em destaque para copiar. */
+function ExportResult({ data, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const err = data.error;
+
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center"
+      style={{ background: "#00000088" }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}
+        className="rounded-lg p-5" style={{ background: C.panel, border: `1px solid ${C.line}`, width: 560 }}>
+        {err ? (
+          <>
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle size={18} style={{ color: SEV.critical.color }} />
+              <span className="text-sm font-medium" style={{ ...sans, color: C.text }}>Falha ao exportar</span>
+            </div>
+            <p className="text-sm" style={{ ...sans, color: C.dim }}>{err}</p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldCheck size={18} style={{ color: C.ok }} />
+              <span className="text-sm font-medium" style={{ ...sans, color: C.text }}>Evidência exportada</span>
+            </div>
+            <p className="text-sm mb-3" style={{ ...sans, color: C.dim }}>
+              {data.deviceCount} dispositivos e {data.findingCount} achados, com selo de integridade.
+            </p>
+            <div className="rounded-md p-3 mb-3" style={{ background: C.raised, border: `1px solid ${C.line}` }}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs" style={{ ...sans, color: C.faint }}>Selo SHA-256 do manifesto</span>
+                <button onClick={() => {
+                  navigator.clipboard?.writeText(data.hash);
+                  setCopied(true); window.setTimeout(() => setCopied(false), 1400);
+                }} className="text-xs inline-flex items-center gap-1" style={{ ...sans, color: C.cyan }}>
+                  {copied ? <>Copiado <Check size={11} /></> : <>Copiar <Copy size={11} /></>}
+                </button>
+              </div>
+              <p style={{ ...mono, color: C.ok, fontSize: 11, wordBreak: "break-all" }}>{data.hash}</p>
+            </div>
+            <div className="flex flex-col gap-1 text-xs" style={{ ...mono, color: C.faint }}>
+              <span>{data.manifestPath}</span>
+              <span>{data.reportPath}</span>
+            </div>
+            <p className="text-xs mt-3 leading-relaxed" style={{ ...sans, color: C.faint, maxWidth: "64ch" }}>
+              O arquivo .json é a evidência verificável; qualquer alteração muda o selo. O .html é o
+              relatório legível — abra no navegador e use Imprimir para gerar um PDF.
+            </p>
+          </>
+        )}
+        <div className="flex justify-end mt-4">
+          <button onClick={onClose} className="rounded-md px-3 h-8 text-sm"
+            style={{ ...sans, background: C.raised, color: C.text, border: `1px solid ${C.line}` }}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelect }) {
   const total = Object.keys(rules).length;
   const off = Object.values(rules).filter((r) => !r.enabled).length;
@@ -821,8 +981,21 @@ export default function App() {
 
   const [view, setView] = useState("overview");
   const [selected, setSelected] = useState(null);
+  const [exportState, setExportState] = useState(null); // null | "working" | result
 
   const open = (d) => { setSelected(d); setView("device"); };
+
+  const doExport = async () => {
+    if (devices.length === 0) return;
+    setExportState("working");
+    try {
+      const r = await api.exportEvidence(cidr || "rede local");
+      setExportState(r);
+    } catch (e) {
+      // Cancelar o diálogo cai aqui; não é erro que mereça alarde.
+      setExportState(String(e).includes("cancelada") ? null : { error: String(e) });
+    }
+  };
 
   return (
     <div className="flex" style={{ background: C.app, color: C.text, minHeight: "100vh", ...sans }}>
@@ -917,9 +1090,27 @@ export default function App() {
                 : "Nenhuma varredura nesta sessão"}
           </span>
           {scan.error && <span className="text-xs" style={{ color: SEV.critical.color }}>{scan.error}</span>}
+
+          {/* Espaçador: empurra os botões para a direita SEMPRE, mesmo quando o
+              botão de exportar não aparece (nenhum dispositivo ainda). Sem ele,
+              o escanear escorregava para o meio da barra. */}
+          <span className="flex-1" />
+
+          {devices.length > 0 && (
+            <button onClick={doExport} disabled={exportState === "working"}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 h-9 text-sm"
+              style={{
+                ...sans, background: "transparent", color: C.dim,
+                border: `1px solid ${C.line}`,
+              }}
+              title="Exportar evidência selada (.json + .html)">
+              <ShieldCheck size={14} />
+              {exportState === "working" ? "Exportando…" : "Exportar evidência"}
+            </button>
+          )}
           <button onClick={scan.running ? cancelScan : () => startScan()}
             disabled={!iface || !cidr}
-            className="ml-auto inline-flex items-center gap-2 rounded-md px-3.5 h-9 text-sm font-medium"
+            className="inline-flex items-center gap-2 rounded-md px-3.5 h-9 text-sm font-medium"
             style={{
               background: scan.running ? C.raised : C.cyan,
               color: scan.running ? C.text : "#06090F",
@@ -942,7 +1133,11 @@ export default function App() {
             um terminal em branco com só o cursor, porque o shell não reimprime
             um prompt que já imprimiu. */}
         <div className="flex-1 min-h-0 relative">
-          <main className="absolute inset-0 p-6"
+          {exportState && typeof exportState === "object" && (
+          <ExportResult data={exportState} onClose={() => setExportState(null)} />
+        )}
+
+        <main className="absolute inset-0 p-6"
             style={{
               display: view === "terminal" ? "none" : "block",
               // O mapa gerencia o próprio deslocamento com zoom e arrasto;

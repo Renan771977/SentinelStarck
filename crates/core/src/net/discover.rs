@@ -45,6 +45,11 @@ pub fn resolve_interface(name: &str) -> Option<pnet::datalink::NetworkInterface>
 
     let all = datalink::interfaces();
 
+    // 1. Casar pelo IPv4. Caminho normal no Linux e no macOS.
+    //
+    // No Windows o pnet frequentemente devolve as interfaces com a lista de
+    // IPs VAZIA — é uma limitação conhecida dele. Por isso este passo pode
+    // falhar mesmo com tudo certo, e existem os passos seguintes.
     if let Some(want) = super::iface::ipv4_of(name) {
         if let Some(found) = all.iter().find(|i| {
             i.ips.iter().any(|n| match n.ip() {
@@ -54,16 +59,48 @@ pub fn resolve_interface(name: &str) -> Option<pnet::datalink::NetworkInterface>
         }) {
             return Some(found.clone());
         }
+
+        // 2. Casar pelo ÍNDICE do adaptador.
+        //
+        // O índice é o mesmo nos dois mundos: o if-addrs e o pnet leem da mesma
+        // tabela do sistema. Isso resolve o Windows quando o pnet não trouxe
+        // IP nenhum, que é justamente o caso que deixava tudo "sem ARP".
+        if let Some(idx) = super::iface::index_of(name) {
+            if let Some(found) = all.iter().find(|i| i.index == idx) {
+                return Some(found.clone());
+            }
+        }
     }
 
+    // 3. Casar pelo nome exato (para quem passar o caminho NPF direto).
     if let Some(found) = all.iter().find(|i| i.name == name) {
         return Some(found.clone());
     }
 
+    // Chegou aqui: nada casou. Registra o que o pnet viu, para o diagnóstico
+    // não depender de adivinhação na próxima vez.
+    tracing::warn!(
+        "interface '{}' não casou. if-addrs índice={:?} ipv4={:?}. pnet viu: {:?}",
+        name,
+        super::iface::index_of(name),
+        super::iface::ipv4_of(name),
+        all.iter()
+            .map(|i| (i.name.clone(), i.index, i.ips.iter().map(|x| x.to_string()).collect::<Vec<_>>()))
+            .collect::<Vec<_>>()
+    );
+
+    // 4. Nome vazio: primeira interface ativa com MAC. Quando nem isso resolve,
+    // e ainda há uma única candidata plausível, usa ela — melhor tentar abrir o
+    // canal e deixar o resultado real decidir do que declarar "sem ARP" cedo.
+    let candidatas: Vec<_> = all
+        .iter()
+        .filter(|i| !i.is_loopback() && i.mac.is_some())
+        .collect();
     if name.is_empty() {
-        return all
-            .into_iter()
-            .find(|i| !i.is_loopback() && i.mac.is_some() && i.ips.iter().any(|n| n.is_ipv4()));
+        return candidatas.first().map(|i| (*i).clone());
+    }
+    if candidatas.len() == 1 {
+        return Some(candidatas[0].clone());
     }
 
     None

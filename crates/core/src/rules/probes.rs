@@ -219,6 +219,42 @@ pub async fn run_for_host(
     probe!("elastic_noauth", 9200, elastic_noauth(ip, t));
     probe!("smb_v1_negotiated", 445, smb_v1_negotiated(ip, t));
 
+    // TLS em qualquer porta que costuma falar TLS. A inspeção alimenta cinco
+    // regras de uma vez, então roda uma vez por porta e o resultado é
+    // repartido entre elas no avaliador.
+    for tls_port in [443u16, 465, 636, 993, 995, 8443, 9443, 5001] {
+        if open.contains(&tls_port) {
+            ran.insert("tls_inspect".to_string());
+            if let Some(info) = crate::net::tls::inspect(ip, tls_port, t).await {
+                let now = crate::model::now();
+                let scope = format!("tcp/{tls_port}");
+                if info.expired(now) {
+                    hits.insert(format!("cert_expired:{scope}"),
+                        format!("certificado vencido em {tls_port}/tcp"));
+                }
+                if let Some(secs) = info.seconds_until_expiry(now) {
+                    if secs > 0 && secs < 30 * 86_400 {
+                        hits.insert(format!("cert_expiring_soon:{scope}"),
+                            format!("certificado vence em {} dias", secs / 86_400));
+                    }
+                }
+                if info.legacy_protocol() {
+                    hits.insert(format!("tls_legacy_version:{scope}"),
+                        format!("{} aceito em {tls_port}/tcp", info.protocol));
+                }
+                if info.weak_key() {
+                    hits.insert(format!("cert_weak_key:{scope}"),
+                        format!("chave {} {} bits", info.key_type.clone().unwrap_or_default(),
+                                info.key_bits.unwrap_or(0)));
+                }
+                if info.self_signed {
+                    hits.insert(format!("cert_self_signed:{scope}"),
+                        "certificado autoassinado".to_string());
+                }
+            }
+        }
+    }
+
     // eol_lookup não depende de porta: depende de conhecer o sistema.
     if let Some(os) = os_guess {
         ran.insert("eol_lookup".to_string());

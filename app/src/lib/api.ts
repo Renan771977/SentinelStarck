@@ -96,11 +96,39 @@ export interface AddressInfo {
   isCurrent: boolean;
 }
 
+export interface TlsInfo {
+  protocol: string;
+  subject: string | null;
+  issuer: string | null;
+  san: string[];
+  notBefore: number | null;
+  notAfter: number | null;
+  keyType: string | null;
+  keyBits: number | null;
+  selfSigned: boolean;
+  signatureAlgorithm: string | null;
+}
+
+export type HintKind = "shell" | "browser" | "external" | "info";
+
+export interface ConnectHint {
+  label: string;
+  /** Comando pronto, com IP e porta preenchidos. */
+  command: string;
+  kind: HintKind;
+  /** Presente quando o protocolo é inseguro. */
+  warning: string | null;
+}
+
 export interface ServiceInfo {
   protocol: string;
   port: number;
   serviceName: string | null;
   banner: string | null;
+  /** JSON serializado de TlsInfo, ou null quando a porta não fala TLS. */
+  tlsInfo: string | null;
+  /** Comandos de conexão sugeridos para esta porta. */
+  connectHints: ConnectHint[];
 }
 
 export interface FindingInfo {
@@ -226,6 +254,19 @@ export const api = {
 
   /** Falso quando o binário foi compilado sem a feature `terminal`. */
   terminalAvailable: () => invoke<boolean>("terminal_available"),
+
+  /**
+   * Exporta a evidência selada. Abre diálogo de pasta, grava manifesto .json e
+   * relatório .html, retorna o hash e os caminhos.
+   */
+  exportEvidence: (scope: string) =>
+    invoke<{
+      hash: string;
+      manifestPath: string;
+      reportPath: string;
+      deviceCount: number;
+      findingCount: number;
+    }>("export_evidence", { scope }),
 
   exclusionsList: () => invoke<string[]>("exclusions_list"),
   exclusionAdd: (target: string, reason?: string) =>

@@ -164,6 +164,14 @@ fn is_evaluable(rule: &Rule, cov: &EvalCoverage) -> bool {
             if custom == "eol_lookup" {
                 return cov.os_known;
             }
+            // As cinco regras de certificado dependem da mesma sonda TLS.
+            const TLS_MATCHERS: &[&str] = &[
+                "cert_expired", "cert_expiring_soon", "tls_legacy_version",
+                "cert_weak_key", "cert_self_signed",
+            ];
+            if TLS_MATCHERS.contains(&custom.as_str()) {
+                return cov.probes_run.contains("tls_inspect");
+            }
             cov.probes_run.contains(custom)
         }
         Matcher::Declarative(d) => {
@@ -189,11 +197,24 @@ fn is_evaluable(rule: &Rule, cov: &EvalCoverage) -> bool {
 /// primeira por causa do UNIQUE do schema.
 fn matches(rule: &Rule, state: &DeviceState) -> Vec<(Option<String>, String)> {
     match &rule.matcher {
-        Matcher::Custom { custom, .. } => state
-            .probe_hits
-            .get(custom)
-            .map(|ev| vec![(None, ev.clone())])
-            .unwrap_or_default(),
+        Matcher::Custom { custom, .. } => {
+            // Sonda simples: chave exata, um achado sem escopo.
+            if let Some(ev) = state.probe_hits.get(custom) {
+                return vec![(None, ev.clone())];
+            }
+            // Sonda com escopo por porta (as regras TLS): a chave vem como
+            // "matcher:tcp/443". Cada porta afetada vira um achado próprio,
+            // pelo mesmo motivo de NET-005 poder disparar em 80 e 8080.
+            let prefix = format!("{custom}:");
+            let mut hits: Vec<(Option<String>, String)> = state
+                .probe_hits
+                .iter()
+                .filter(|(k, _)| k.starts_with(&prefix))
+                .map(|(k, ev)| (Some(k[prefix.len()..].to_string()), ev.clone()))
+                .collect();
+            hits.sort();
+            hits
+        }
 
         Matcher::Declarative(d) => {
             // Filtro por tipo e fabricante primeiro: barato e descarta cedo.

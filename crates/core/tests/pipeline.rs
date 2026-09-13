@@ -214,3 +214,53 @@ fn varredura_roda_em_thread_dedicada_com_runtime_proprio() {
 
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!("sentinel-test-{}", std::process::id())));
 }
+
+/// Uma inspeção TLS que encontrou certificado autoassinado, vencido e chave
+/// fraca precisa gerar exatamente três achados, cada um com seu escopo de porta.
+#[test]
+fn inspecao_tls_gera_achados_por_porta() {
+    use sentinel_core::rules::eval::{self, DeviceState, EvalCoverage, ServiceState};
+    use std::collections::{HashMap, HashSet};
+
+    let conn = store::open_memory().unwrap();
+    conn.execute(
+        "INSERT INTO device (id, kind, identity_confidence, first_seen, last_seen, created_at, updated_at)
+         VALUES ('d1','server','high',1,1,1,1)", [],
+    ).unwrap();
+
+    let mut probe_hits = HashMap::new();
+    probe_hits.insert("cert_self_signed:tcp/443".into(), "certificado autoassinado".into());
+    probe_hits.insert("cert_expired:tcp/443".into(), "certificado vencido em 443/tcp".into());
+    probe_hits.insert("cert_weak_key:tcp/8443".into(), "chave RSA 1024 bits".into());
+
+    let state = DeviceState {
+        id: "d1".into(),
+        kind: DeviceKind::Server,
+        vendor: None, os_guess: None,
+        ips: vec!["192.168.1.10".parse().unwrap()],
+        services: vec![
+            ServiceState { protocol: "tcp".into(), port: 443, service_name: None, banner: None, tls_info: None },
+            ServiceState { protocol: "tcp".into(), port: 8443, service_name: None, banner: None, tls_info: None },
+        ],
+        probe_hits,
+        has_credential_consent: false,
+    };
+
+    let mut cov = EvalCoverage {
+        ports_scanned: true, banners_grabbed: true, os_known: false,
+        probes_run: HashSet::new(),
+    };
+    cov.probes_run.insert("tls_inspect".into());
+
+    let findings = eval::evaluate(&state, &cov);
+
+    // TLS-001 (expired), TLS-004 (weak key), TLS-005 (self signed).
+    let ids: Vec<&str> = findings.iter().map(|f| f.rule_id.as_str()).collect();
+    assert!(ids.contains(&"TLS-001"), "certificado vencido");
+    assert!(ids.contains(&"TLS-004"), "chave fraca");
+    assert!(ids.contains(&"TLS-005"), "autoassinado");
+
+    // O escopo distingue as portas.
+    let weak = findings.iter().find(|f| f.rule_id == "TLS-004").unwrap();
+    assert_eq!(weak.scope.as_deref(), Some("tcp/8443"));
+}

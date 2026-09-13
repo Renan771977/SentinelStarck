@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn view_de_resumo_tem_campos_forenses() {
         let conn = open_memory().unwrap();
-        let mut stmt = conn.prepare("SELECT * FROM v_device_summary LIMIT 0").unwrap();
+        let stmt = conn.prepare("SELECT * FROM v_device_summary LIMIT 0").unwrap();
         let cols: Vec<String> = stmt.column_names().iter().map(|c| c.to_string()).collect();
         for c in ["first_seen", "hostname", "ip_history_count", "ip", "mac"] {
             assert!(cols.contains(&c.to_string()), "coluna {c} faltando na view");
