@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Check, AlertTriangle, Info, X } from "lucide-react";
+import { T, SEVERITY, sans } from "./theme";
 
 /**
  * Toasts: confirmação discreta de ações e avisos de erro.
@@ -10,17 +11,11 @@ import { Check, AlertTriangle, Info, X } from "lucide-react";
  * num `.catch` vazio. É o que dá ao app a sensação de responder.
  */
 
-const C = {
-  panel: "#0F141D", raised: "#161D29", line: "#222C3C",
-  text: "#E8ECF4", dim: "#9AA5B8", faint: "#6B7688",
-  ok: "#35D07F", warn: "#FFC94D", err: "#FF4D6D", info: "#00C2FF",
-};
-const sans = { fontFamily: "Inter,-apple-system,'Segoe UI',sans-serif" };
 
 const KIND = {
-  success: { color: C.ok, icon: Check },
-  error: { color: C.err, icon: AlertTriangle },
-  info: { color: C.info, icon: Info },
+  success: { color: T.ok, icon: Check },
+  error: { color: SEVERITY.critical, icon: AlertTriangle },
+  info: { color: T.accent, icon: Info },
 };
 
 const ToastContext = createContext(null);
@@ -78,15 +73,15 @@ function Toast({ toast, onClose }) {
   return (
     <div className="rounded-lg px-3 py-2.5 flex items-start gap-2.5"
       style={{
-        background: C.panel, border: `1px solid ${color}44`,
-        boxShadow: "0 8px 24px #00000055", pointerEvents: "auto",
+        background: T.surface, border: `1px solid ${color}44`,
+        boxShadow: T.shadowToast, pointerEvents: "auto",
         transform: entered ? "translateX(0)" : "translateX(20px)",
         opacity: entered ? 1 : 0,
         transition: "transform .18s ease, opacity .18s ease",
       }}>
       <Icon size={15} style={{ color, marginTop: 1 }} className="shrink-0" />
-      <span className="text-sm flex-1" style={{ ...sans, color: C.text }}>{toast.message}</span>
-      <button onClick={onClose} className="shrink-0" style={{ color: C.faint }}>
+      <span className="text-sm flex-1" style={{ ...sans, color: T.text }}>{toast.message}</span>
+      <button onClick={onClose} className="shrink-0" style={{ color: T.faint }}>
         <X size={13} />
       </button>
     </div>

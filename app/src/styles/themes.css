@@ -1,0 +1,373 @@
+/*
+ * ============================================================================
+ *  Temas do SentinelStack
+ *
+ *  Cada bloco redefine os tokens de `tokens.css`. Trocar tema é mudar o
+ *  atributo `data-theme` no <html>: o navegador reavalia as variáveis e TODA a
+ *  interface muda junto, sem re-render do React.
+ *
+ *  REGRA AO ADICIONAR UM TEMA: defina TODOS os tokens, inclusive os 20 do
+ *  terminal. Um token faltando herda o valor do tema anterior e produz
+ *  combinação sem contraste — um cinza claro sobre fundo claro, por exemplo.
+ *  A lista completa está em tokens.css.
+ * ============================================================================
+ */
+
+/* ==========================================================================
+ *  CYBERPUNK 2077
+ *
+ *  Amarelo ácido, ciano e carmim sobre preto, direto da identidade do jogo.
+ *
+ *  DECISÃO: o amarelo #fcee0a fica restrito a DESTAQUE — botão, foco, dado
+ *  vivo. As superfícies continuam escuras. No jogo esse amarelo aparece em
+ *  rajadas curtas de HUD; numa ferramenta usada oito horas, amarelo em área
+ *  grande causa fadiga visual real. Assim o tema é reconhecível sem cansar.
+ *
+ *  A severidade média virou âmbar (#ffb000) em vez de amarelo: com o amarelo
+ *  já sendo a cor de destaque, um alerta amarelo se perderia no meio da
+ *  interface em vez de saltar.
+ * ========================================================================== */
+[data-theme="cyberpunk2077"] {
+  --bg: #08080a;
+  --surface: #101014;
+  --surface-raised: #1a1a20;
+  --surface-hover: #23232b;
+  --surface-terminal: #0a0a0c;
+  --surface-offline: #141418;
+
+  --border: #2b2b35;
+  --border-subtle: #1d1d24;
+
+  --text: #f4f4f0;
+  --text-dim: #a8a8a0;
+  --text-faint: #6e6e68;
+  --text-on-accent: #08080a;
+
+  --accent: #fcee0a;
+  --accent-soft: #fcee0a1c;
+  --accent-border: #fcee0a44;
+  --accent-2: #02d7f2;
+  --accent-2-soft: #02d7f22a;
+
+  --sev-critical: #ff2e63;
+  --sev-high: #ff7518;
+  --sev-medium: #ffb000;
+  --sev-low: #02d7f2;
+  --sev-info: #7a7a80;
+  --ok: #57e9dc;
+
+  --sev-critical-soft: #ff2e6318;
+  --sev-high-soft: #ff751818;
+  --sev-medium-soft: #ffb00018;
+  --ok-soft: #57e9dc18;
+
+  --overlay: #000000b0;
+  --shadow-modal: 0 16px 48px #000000cc;
+  --shadow-toast: 0 8px 24px #00000088;
+
+  --skel-base: #1a1a20;
+  --skel-shine: #26262e;
+
+  --term-bg: #0a0a0c;
+  --term-fg: #f4f4f0;
+  --term-cursor: #fcee0a;
+  --term-selection: #fcee0a22;
+  --term-selection-inactive: #fcee0a12;
+  --term-black: #0a0a0c;
+  --term-red: #ff2e63;
+  --term-green: #57e9dc;
+  --term-yellow: #fcee0a;
+  --term-blue: #02d7f2;
+  --term-magenta: #d0104c;
+  --term-cyan: #02d7f2;
+  --term-white: #d0d0c8;
+  --term-bright-black: #6e6e68;
+  --term-bright-red: #ff5c85;
+  --term-bright-green: #7ff0e6;
+  --term-bright-yellow: #fff45c;
+  --term-bright-blue: #5ce6f7;
+  --term-bright-magenta: #ff4d80;
+  --term-bright-cyan: #8af3ff;
+  --term-bright-white: #f8f8f4;
+}
+
+/* ==========================================================================
+ *  DRACULA
+ *  Paleta oficial do tema. Roxo e rosa sobre cinza-azulado.
+ * ========================================================================== */
+[data-theme="dracula"] {
+  --bg: #21222c;
+  --surface: #282a36;
+  --surface-raised: #343746;
+  --surface-hover: #44475a;
+  --surface-terminal: #1e1f29;
+  --surface-offline: #2b2d3a;
+
+  --border: #44475a;
+  --border-subtle: #343746;
+
+  --text: #f8f8f2;
+  --text-dim: #b9bbcd;
+  --text-faint: #6272a4;
+  --text-on-accent: #21222c;
+
+  --accent: #bd93f9;
+  --accent-soft: #bd93f922;
+  --accent-border: #bd93f944;
+  --accent-2: #ff79c6;
+  --accent-2-soft: #ff79c62a;
+
+  --sev-critical: #ff5555;
+  --sev-high: #ffb86c;
+  --sev-medium: #f1fa8c;
+  --sev-low: #8be9fd;
+  --sev-info: #6272a4;
+  --ok: #50fa7b;
+
+  --sev-critical-soft: #ff555518;
+  --sev-high-soft: #ffb86c18;
+  --sev-medium-soft: #f1fa8c18;
+  --ok-soft: #50fa7b18;
+
+  --overlay: #191a21cc;
+  --shadow-modal: 0 16px 48px #191a21cc;
+  --shadow-toast: 0 8px 24px #191a2199;
+
+  --skel-base: #343746;
+  --skel-shine: #44475a;
+
+  --term-bg: #1e1f29;
+  --term-fg: #f8f8f2;
+  --term-cursor: #f8f8f2;
+  --term-selection: #44475a88;
+  --term-selection-inactive: #44475a44;
+  --term-black: #21222c;
+  --term-red: #ff5555;
+  --term-green: #50fa7b;
+  --term-yellow: #f1fa8c;
+  --term-blue: #bd93f9;
+  --term-magenta: #ff79c6;
+  --term-cyan: #8be9fd;
+  --term-white: #f8f8f2;
+  --term-bright-black: #6272a4;
+  --term-bright-red: #ff6e6e;
+  --term-bright-green: #69ff94;
+  --term-bright-yellow: #ffffa5;
+  --term-bright-blue: #d6acff;
+  --term-bright-magenta: #ff92df;
+  --term-bright-cyan: #a4ffff;
+  --term-bright-white: #ffffff;
+}
+
+/* ==========================================================================
+ *  ONE DARK
+ *  O tema mais instalado do VSCode. Azul acinzentado, contraste moderado.
+ * ========================================================================== */
+[data-theme="onedark"] {
+  --bg: #21252b;
+  --surface: #282c34;
+  --surface-raised: #2f343d;
+  --surface-hover: #3a3f4b;
+  --surface-terminal: #1e2127;
+  --surface-offline: #2b2f37;
+
+  --border: #3e4451;
+  --border-subtle: #2f343d;
+
+  --text: #d7dae0;
+  --text-dim: #abb2bf;
+  --text-faint: #7f848e;
+  --text-on-accent: #1e2127;
+
+  --accent: #61afef;
+  --accent-soft: #61afef22;
+  --accent-border: #61afef44;
+  --accent-2: #c678dd;
+  --accent-2-soft: #c678dd2a;
+
+  --sev-critical: #e06c75;
+  --sev-high: #d19a66;
+  --sev-medium: #e5c07b;
+  --sev-low: #56b6c2;
+  --sev-info: #7f848e;
+  --ok: #98c379;
+
+  --sev-critical-soft: #e06c7518;
+  --sev-high-soft: #d19a6618;
+  --sev-medium-soft: #e5c07b18;
+  --ok-soft: #98c37918;
+
+  --overlay: #181a1fcc;
+  --shadow-modal: 0 16px 48px #181a1fcc;
+  --shadow-toast: 0 8px 24px #181a1f99;
+
+  --skel-base: #2f343d;
+  --skel-shine: #3a3f4b;
+
+  --term-bg: #1e2127;
+  --term-fg: #abb2bf;
+  --term-cursor: #61afef;
+  --term-selection: #3e4451aa;
+  --term-selection-inactive: #3e445155;
+  --term-black: #21252b;
+  --term-red: #e06c75;
+  --term-green: #98c379;
+  --term-yellow: #e5c07b;
+  --term-blue: #61afef;
+  --term-magenta: #c678dd;
+  --term-cyan: #56b6c2;
+  --term-white: #abb2bf;
+  --term-bright-black: #5c6370;
+  --term-bright-red: #e98b93;
+  --term-bright-green: #b5d99c;
+  --term-bright-yellow: #f0d3a4;
+  --term-bright-blue: #8cc6f4;
+  --term-bright-magenta: #d79ae6;
+  --term-bright-cyan: #7fcbd4;
+  --term-bright-white: #ffffff;
+}
+
+/* ==========================================================================
+ *  NORD
+ *  Frio e sóbrio. Contraste baixo de propósito: é o mais confortável para
+ *  turno longo, à custa de os alertas saltarem menos.
+ * ========================================================================== */
+[data-theme="nord"] {
+  --bg: #2e3440;
+  --surface: #3b4252;
+  --surface-raised: #434c5e;
+  --surface-hover: #4c566a;
+  --surface-terminal: #292e39;
+  --surface-offline: #363c4a;
+
+  --border: #4c566a;
+  --border-subtle: #434c5e;
+
+  --text: #eceff4;
+  --text-dim: #d8dee9;
+  --text-faint: #8b96a8;
+  --text-on-accent: #2e3440;
+
+  --accent: #88c0d0;
+  --accent-soft: #88c0d022;
+  --accent-border: #88c0d044;
+  --accent-2: #b48ead;
+  --accent-2-soft: #b48ead2a;
+
+  --sev-critical: #bf616a;
+  --sev-high: #d08770;
+  --sev-medium: #ebcb8b;
+  --sev-low: #81a1c1;
+  --sev-info: #8b96a8;
+  --ok: #a3be8c;
+
+  --sev-critical-soft: #bf616a20;
+  --sev-high-soft: #d0877020;
+  --sev-medium-soft: #ebcb8b20;
+  --ok-soft: #a3be8c20;
+
+  --overlay: #242933cc;
+  --shadow-modal: 0 16px 48px #242933cc;
+  --shadow-toast: 0 8px 24px #24293399;
+
+  --skel-base: #434c5e;
+  --skel-shine: #4c566a;
+
+  --term-bg: #292e39;
+  --term-fg: #d8dee9;
+  --term-cursor: #88c0d0;
+  --term-selection: #4c566aaa;
+  --term-selection-inactive: #4c566a55;
+  --term-black: #3b4252;
+  --term-red: #bf616a;
+  --term-green: #a3be8c;
+  --term-yellow: #ebcb8b;
+  --term-blue: #81a1c1;
+  --term-magenta: #b48ead;
+  --term-cyan: #88c0d0;
+  --term-white: #e5e9f0;
+  --term-bright-black: #4c566a;
+  --term-bright-red: #d08770;
+  --term-bright-green: #b5cfa0;
+  --term-bright-yellow: #f0d9a5;
+  --term-bright-blue: #9fb6d0;
+  --term-bright-magenta: #c8a5c0;
+  --term-bright-cyan: #8fbcbb;
+  --term-bright-white: #eceff4;
+}
+
+/* ==========================================================================
+ *  CLARO
+ *
+ *  Inspirado no GitHub Light. Existe por dois motivos práticos: perícia
+ *  costuma virar relatório impresso, e há quem trabalhe em sala muito
+ *  iluminada onde tema escuro reflete.
+ *
+ *  ATENÇÃO ao adaptar: aqui `--text-on-accent` é CLARO (texto branco sobre
+ *  azul), o inverso dos temas escuros. É exatamente o caso que justifica os
+ *  nomes semânticos: o componente pede "texto sobre destaque" e recebe o
+ *  valor certo sem saber qual é.
+ * ========================================================================== */
+[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #f6f8fa;
+  --surface-raised: #eaeef2;
+  --surface-hover: #dfe3e8;
+  --surface-terminal: #f6f8fa;
+  --surface-offline: #eef1f4;
+
+  --border: #d0d7de;
+  --border-subtle: #e4e8ec;
+
+  --text: #1f2328;
+  --text-dim: #4a5058;
+  --text-faint: #7d858e;
+  --text-on-accent: #ffffff;
+
+  --accent: #0969da;
+  --accent-soft: #0969da14;
+  --accent-border: #0969da44;
+  --accent-2: #8250df;
+  --accent-2-soft: #8250df1a;
+
+  --sev-critical: #cf222e;
+  --sev-high: #bc4c00;
+  --sev-medium: #9a6700;
+  --sev-low: #0969da;
+  --sev-info: #6e7781;
+  --ok: #1a7f37;
+
+  --sev-critical-soft: #cf222e14;
+  --sev-high-soft: #bc4c0014;
+  --sev-medium-soft: #9a670014;
+  --ok-soft: #1a7f3714;
+
+  --overlay: #1f232866;
+  --shadow-modal: 0 16px 48px #1f232833;
+  --shadow-toast: 0 8px 24px #1f232822;
+
+  --skel-base: #eaeef2;
+  --skel-shine: #f2f5f8;
+
+  --term-bg: #ffffff;
+  --term-fg: #1f2328;
+  --term-cursor: #0969da;
+  --term-selection: #0969da22;
+  --term-selection-inactive: #0969da11;
+  --term-black: #24292f;
+  --term-red: #cf222e;
+  --term-green: #116329;
+  --term-yellow: #4d2d00;
+  --term-blue: #0969da;
+  --term-magenta: #8250df;
+  --term-cyan: #1b7c83;
+  --term-white: #6e7781;
+  --term-bright-black: #57606a;
+  --term-bright-red: #a40e26;
+  --term-bright-green: #1a7f37;
+  --term-bright-yellow: #633c01;
+  --term-bright-blue: #218bff;
+  --term-bright-magenta: #a475f9;
+  --term-bright-cyan: #3192aa;
+  --term-bright-white: #8c959f;
+}

@@ -380,6 +380,17 @@ fn parse_neighbor_table(text: &str) -> Vec<Observation> {
             }
         }
 
+        // Descarta o que nunca é um host de verdade.
+        //
+        // A tabela ARP do sistema lista entradas de MULTICAST — 224.0.0.x é
+        // usado por IGMP e mDNS — e elas apareciam no inventário como
+        // dispositivos fantasma. Broadcast e link-local pelo mesmo motivo.
+        if let Some(v4) = ip {
+            if !is_real_host(v4) {
+                continue;
+            }
+        }
+
         if let (Some(ip), Some(mac)) = (ip, mac) {
             out.push(Observation {
                 ip: Some(IpAddr::V4(ip)),
@@ -396,9 +407,48 @@ fn parse_neighbor_table(text: &str) -> Vec<Observation> {
     out
 }
 
+/// Um endereço que pode pertencer a um dispositivo real na rede local.
+///
+/// Multicast (224.0.0.0/4), broadcast, loopback e link-local nunca são. Sem
+/// este filtro, endereços de IGMP e mDNS que aparecem na tabela ARP do sistema
+/// entram no inventário como dispositivos que não existem.
+fn is_real_host(ip: Ipv4Addr) -> bool {
+    !ip.is_multicast()
+        && !ip.is_broadcast()
+        && !ip.is_loopback()
+        && !ip.is_link_local()
+        && !ip.is_unspecified()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn descarta_multicast_e_broadcast() {
+        // Os que apareciam como dispositivo fantasma no mapa.
+        assert!(!is_real_host("224.0.0.7".parse().unwrap()));
+        assert!(!is_real_host("224.0.0.22".parse().unwrap()));
+        assert!(!is_real_host("239.255.255.250".parse().unwrap()));
+        assert!(!is_real_host("255.255.255.255".parse().unwrap()));
+        assert!(!is_real_host("127.0.0.1".parse().unwrap()));
+        assert!(!is_real_host("169.254.1.1".parse().unwrap()));
+        assert!(!is_real_host("0.0.0.0".parse().unwrap()));
+
+        // Hosts de verdade passam.
+        assert!(is_real_host("192.168.1.68".parse().unwrap()));
+        assert!(is_real_host("10.0.0.5".parse().unwrap()));
+        assert!(is_real_host("8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
+    fn tabela_com_multicast_nao_gera_observacao() {
+        let s = "224.0.0.22 dev eth0 lladdr 01:00:5e:00:00:16 REACHABLE\n\
+                 192.168.1.68 dev eth0 lladdr a4:83:e7:1b:2c:0d REACHABLE";
+        let r = parse_neighbor_table(s);
+        assert_eq!(r.len(), 1, "só o host real entra");
+        assert_eq!(r[0].ip.unwrap().to_string(), "192.168.1.68");
+    }
 
     #[test]
     fn parseia_ip_neigh_do_linux() {

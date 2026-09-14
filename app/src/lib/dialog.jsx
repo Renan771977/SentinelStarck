@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { T, SEVERITY, sans } from "./theme";
 
 /**
  * Diálogos do próprio app: substituem window.prompt e window.confirm.
@@ -13,11 +14,6 @@ import { X } from "lucide-react";
  * lê tão natural quanto o window.prompt, mas sem o visual de navegador.
  */
 
-const C = {
-  overlay: "#00000099", panel: "#0F141D", raised: "#161D29", line: "#222C3C",
-  text: "#E8ECF4", dim: "#9AA5B8", faint: "#6B7688", cyan: "#00C2FF",
-};
-const sans = { fontFamily: "Inter,-apple-system,'Segoe UI',sans-serif" };
 
 const DialogContext = createContext(null);
 
@@ -105,15 +101,15 @@ function DialogView({ dialog, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: C.overlay }}
+      style={{ background: T.overlay }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(isPrompt ? null : false); }}>
       <div className="rounded-lg" onKeyDown={onKey}
-        style={{ background: C.panel, border: `1px solid ${C.line}`, width: 440, boxShadow: "0 16px 48px #000000aa" }}>
-        <header className="flex items-center justify-between px-4 h-12" style={{ borderBottom: `1px solid ${C.line}` }}>
-          <span className="text-sm font-medium" style={{ ...sans, color: C.text }}>
+        style={{ background: T.surface, border: `1px solid ${T.border}`, width: 440, boxShadow: T.shadowModal }}>
+        <header className="flex items-center justify-between px-4 h-12" style={{ borderBottom: `1px solid ${T.border}` }}>
+          <span className="text-sm font-medium" style={{ ...sans, color: T.text }}>
             {dialog.title || (isPrompt ? "Editar" : "Confirmar")}
           </span>
-          <button onClick={() => onClose(isPrompt ? null : false)} style={{ color: C.faint }}>
+          <button onClick={() => onClose(isPrompt ? null : false)} style={{ color: T.faint }}>
             <X size={15} />
           </button>
         </header>
@@ -122,37 +118,37 @@ function DialogView({ dialog, onClose }) {
           {isPrompt ? (
             <>
               {dialog.label && (
-                <label className="text-xs block mb-1.5" style={{ ...sans, color: C.faint }}>{dialog.label}</label>
+                <label className="text-xs block mb-1.5" style={{ ...sans, color: T.faint }}>{dialog.label}</label>
               )}
               {dialog.multiline ? (
                 <textarea ref={inputRef} value={value} onChange={(e) => setValue(e.target.value)}
                   placeholder={dialog.placeholder} rows={3}
                   className="w-full rounded-md px-3 py-2 text-sm outline-none resize-none"
-                  style={{ ...sans, background: C.raised, color: C.text, border: `1px solid ${C.line}` }} />
+                  style={{ ...sans, background: T.raised, color: T.text, border: `1px solid ${T.border}` }} />
               ) : (
                 <input ref={inputRef} value={value} onChange={(e) => setValue(e.target.value)}
                   placeholder={dialog.placeholder}
                   className="w-full rounded-md px-3 h-10 text-sm outline-none"
-                  style={{ ...sans, background: C.raised, color: C.text, border: `1px solid ${C.line}` }} />
+                  style={{ ...sans, background: T.raised, color: T.text, border: `1px solid ${T.border}` }} />
               )}
             </>
           ) : (
-            <p className="text-sm" style={{ ...sans, color: C.dim, maxWidth: "60ch" }}>{dialog.message}</p>
+            <p className="text-sm" style={{ ...sans, color: T.dim, maxWidth: "60ch" }}>{dialog.message}</p>
           )}
         </div>
 
         <footer className="flex justify-end gap-2 px-4 pb-4">
           <button onClick={() => onClose(isPrompt ? null : false)}
             className="rounded-md px-3 h-9 text-sm"
-            style={{ ...sans, background: "transparent", color: C.dim, border: `1px solid ${C.line}` }}>
+            style={{ ...sans, background: "transparent", color: T.dim, border: `1px solid ${T.border}` }}>
             Cancelar
           </button>
           <button onClick={submit} autoFocus={!isPrompt}
             className="rounded-md px-3.5 h-9 text-sm font-medium"
             style={{
               ...sans,
-              background: dialog.danger ? "#FF4D6D" : C.cyan,
-              color: "#06090F",
+              background: dialog.danger ? SEVERITY.critical : T.accent,
+              color: T.onAccent,
             }}>
             {dialog.confirmLabel || (isPrompt ? "Salvar" : "Confirmar")}
           </button>

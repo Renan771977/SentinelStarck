@@ -1,10 +1,25 @@
+/* Tokens primeiro: @import precisa vir antes de qualquer regra CSS. */
+@import "./styles/tokens.css";
+@import "./styles/themes.css";
+@import "./styles/animations.css";
+
 /*
  * Fontes locais, não CDN.
  *
  * O produto promete não falar com serviço externo, e promessa desse tipo
- * precisa valer de verdade. Baixe Inter e JetBrains Mono e coloque em
- * src/assets/fonts/.
+ * precisa valer de verdade — por isso nada de Google Fonts.
+ *
+ * Os blocos abaixo estão COMENTADOS de propósito: o Vite aborta o CSS inteiro
+ * se um `url()` apontar para arquivo inexistente, e isso deixa o app em tela
+ * preta. Enquanto as fontes não estiverem baixadas, o app usa as do sistema
+ * pelos fallbacks definidos em --font-sans e --font-mono.
+ *
+ * Para ativar:
+ *   1. Baixe Inter (rsms.me/inter) e JetBrains Mono (jetbrains.com/lp/mono)
+ *   2. Coloque os .woff2 em src/assets/fonts/
+ *   3. Descomente os dois blocos abaixo
  */
+/*
 @font-face {
   font-family: "Inter";
   src: url("./assets/fonts/Inter-Variable.woff2") format("woff2");
@@ -17,6 +32,7 @@
   font-weight: 100 800;
   font-display: swap;
 }
+*/
 
 @tailwind base;
 @tailwind components;
@@ -26,9 +42,9 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: #090C12;
-  color: #E8ECF4;
-  font-family: Inter, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -37,12 +53,6 @@ button { user-select: none; }
 
 /* Barra de rolagem discreta, coerente com o tema escuro. */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #0F141D; }
-::-webkit-scrollbar-thumb { background: #222C3C; border-radius: 5px; }
-::-webkit-scrollbar-thumb:hover { background: #2C3850; }
-
-/* Brilho deslizante dos skeletons de carregamento. */
-@keyframes skel-shimmer {
-  0%   { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--surface-hover); }

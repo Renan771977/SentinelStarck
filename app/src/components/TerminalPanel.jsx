@@ -4,29 +4,37 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Plus, X, TerminalSquare, Trash2 } from "lucide-react";
 import { pty } from "../lib/terminal";
 import "@xterm/xterm/css/xterm.css";
+import { T, SEVERITY, sans, resolveColor } from "../lib/theme";
+import { useTheme } from "../lib/useTheme";
 
-const C = {
-  panel: "#0F141D", raised: "#161D29", line: "#222C3C", lineSoft: "#19212E",
-  text: "#E8ECF4", dim: "#9AA5B8", faint: "#6B7688", cyan: "#00C2FF",
-};
-const sans = { fontFamily: "Inter,-apple-system,'Segoe UI',sans-serif" };
 
 /** Tema do xterm derivado da paleta do app, não dos padrões da biblioteca. */
-const THEME = {
-  background: "#0B0F16",
-  foreground: "#E8ECF4",
-  cursor: "#00C2FF",
-  cursorAccent: "#0B0F16",
-  // Seleção discreta: com opacidade alta, a movimentação de cursor durante o
-  // carregamento de um comando pintava a tela inteira de azul.
-  selectionBackground: "#00C2FF22",
-  selectionInactiveBackground: "#00C2FF14",
-  black: "#0B0F16", red: "#FF4D6D", green: "#35D07F", yellow: "#FFC94D",
-  blue: "#4DA8FF", magenta: "#7C3AED", cyan: "#00C2FF", white: "#C9D1DE",
-  brightBlack: "#6B7688", brightRed: "#FF7A90", brightGreen: "#5FE3A1",
-  brightYellow: "#FFD97A", brightBlue: "#7CC3FF", brightMagenta: "#A47BF5",
-  brightCyan: "#5FD8FF", brightWhite: "#F2F5FA",
-};
+/**
+ * Tema do xterm, montado com cores RESOLVIDAS.
+ *
+ * O xterm não aceita `var(--x)`: ele precisa de cor literal, porque pinta em
+ * canvas. Então lemos os tokens do documento com `resolveColor`. Função, não
+ * constante, para ser reavaliada quando o tema mudar.
+ */
+function buildXtermTheme() {
+  const c = (name) => resolveColor(`var(${name})`);
+  return {
+    background: c("--term-bg"),
+    foreground: c("--term-fg"),
+    cursor: c("--term-cursor"),
+    cursorAccent: c("--term-bg"),
+    selectionBackground: c("--term-selection"),
+    selectionInactiveBackground: c("--term-selection-inactive"),
+    black: c("--term-black"), red: c("--term-red"),
+    green: c("--term-green"), yellow: c("--term-yellow"),
+    blue: c("--term-blue"), magenta: c("--term-magenta"),
+    cyan: c("--term-cyan"), white: c("--term-white"),
+    brightBlack: c("--term-bright-black"), brightRed: c("--term-bright-red"),
+    brightGreen: c("--term-bright-green"), brightYellow: c("--term-bright-yellow"),
+    brightBlue: c("--term-bright-blue"), brightMagenta: c("--term-bright-magenta"),
+    brightCyan: c("--term-bright-cyan"), brightWhite: c("--term-bright-white"),
+  };
+}
 
 
 const KIND_LABEL = {
@@ -45,6 +53,7 @@ const KIND_LABEL = {
  * justamente o que a pessoa quer consultar ao voltar para a aba.
  */
 export default function TerminalPanel({ sessions, onOpen, onClose, visible = true }) {
+  const { theme } = useTheme();
   const hostRefs = useRef(new Map());   // id -> div
   const terms = useRef(new Map());      // id -> { term, fit, unlisten }
   const [active, setActive] = useState(null);
@@ -65,7 +74,7 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
       if (!host) continue;
 
       const term = new XTerm({
-        theme: THEME,
+        theme: buildXtermTheme(),
         fontFamily: "'JetBrains Mono','SFMono-Regular',Consolas,monospace",
         fontSize: 13,
         lineHeight: 1.35,
@@ -100,6 +109,16 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
       terms.current.delete(id);
     }
   }, [sessions, active]);
+
+  // O xterm lê a cor RESOLVIDA na criação e não acompanha variável CSS. Quando
+  // o tema muda, reaplicamos o tema em cada sessão viva — sem isso, o terminal
+  // ficaria com as cores do tema anterior até ser fechado e reaberto.
+  useEffect(() => {
+    const novo = buildXtermTheme();
+    for (const entry of terms.current.values()) {
+      entry.term.options.theme = novo;
+    }
+  }, [theme]);
 
   // Limpeza ao desmontar o painel inteiro.
   useEffect(() => {
@@ -148,10 +167,10 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
   }, [active]);
 
   return (
-    <div ref={panelRef} className="flex flex-col h-full min-h-0" style={{ background: C.panel }}>
+    <div ref={panelRef} className="flex flex-col h-full min-h-0" style={{ background: T.surface }}>
       <header className="flex items-center gap-1 h-9 px-2 shrink-0"
-        style={{ borderBottom: `1px solid ${C.lineSoft}` }}>
-        <TerminalSquare size={14} style={{ color: C.faint }} className="mx-1 shrink-0" />
+        style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+        <TerminalSquare size={14} style={{ color: T.faint }} className="mx-1 shrink-0" />
 
         <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
           {sessions.map((s) => (
@@ -159,21 +178,21 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
               className="group flex items-center gap-1.5 h-7 pl-2.5 pr-1.5 rounded text-xs shrink-0"
               style={{
                 ...sans,
-                background: active === s.id ? C.raised : "transparent",
-                color: active === s.id ? C.text : C.faint,
-                border: `1px solid ${active === s.id ? C.line : "transparent"}`,
+                background: active === s.id ? T.raised : "transparent",
+                color: active === s.id ? T.text : T.faint,
+                border: `1px solid ${active === s.id ? T.border : "transparent"}`,
               }}>
-              <span style={{ color: active === s.id ? C.cyan : C.faint }}>
+              <span style={{ color: active === s.id ? T.accent : T.faint }}>
                 {KIND_LABEL[s.kind] || s.kind}
               </span>
               {s.label && <span className="truncate" style={{ maxWidth: 140 }}>{s.label}</span>}
-              {s.exited && <span style={{ color: C.faint }}>·encerrado</span>}
+              {s.exited && <span style={{ color: T.faint }}>·encerrado</span>}
               {/* Encerrar mata o processo e descarta o histórico. Fica
                   sempre visível na aba ativa: escondido atrás de hover, numa
                   aba só, o botão some e a pessoa não acha como fechar. */}
               <span onClick={(e) => { e.stopPropagation(); onClose(s.id); }}
                 className="rounded p-0.5 group-hover:opacity-100"
-                style={{ color: C.faint, opacity: active === s.id ? 0.7 : 0 }}
+                style={{ color: T.faint, opacity: active === s.id ? 0.7 : 0 }}
                 title="Encerrar sessão">
                 <X size={11} />
               </span>
@@ -182,24 +201,24 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
 
           <button onClick={() => onOpen({ kind: "shell" })}
             className="flex items-center justify-center rounded shrink-0"
-            style={{ width: 26, height: 26, color: C.faint }} title="Novo shell local">
+            style={{ width: 26, height: 26, color: T.faint }} title="Novo shell local">
             <Plus size={14} />
           </button>
         </div>
 
         <button onClick={clear} disabled={!active}
           className="flex items-center justify-center rounded shrink-0"
-          style={{ width: 26, height: 26, color: C.faint, opacity: active ? 1 : 0.4 }}
+          style={{ width: 26, height: 26, color: T.faint, opacity: active ? 1 : 0.4 }}
           title="Limpar">
           <Trash2 size={13} />
         </button>
       </header>
 
-      <div className="flex-1 min-h-0 relative" style={{ background: "#0B0F16" }}>
+      <div className="flex-1 min-h-0 relative" style={{ background: T.terminal }}>
         {sessions.length === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <p className="text-sm" style={{ ...sans, color: C.dim }}>Nenhuma sessão aberta</p>
-            <p className="text-xs text-center" style={{ ...sans, color: C.faint, maxWidth: 380 }}>
+            <p className="text-sm" style={{ ...sans, color: T.dim }}>Nenhuma sessão aberta</p>
+            <p className="text-xs text-center" style={{ ...sans, color: T.faint, maxWidth: 380 }}>
               Abra um shell local pelo botão acima, ou vá ao detalhe de um dispositivo
               para conectar nele conforme os serviços que a varredura encontrou.
             </p>
@@ -215,7 +234,7 @@ export default function TerminalPanel({ sessions, onOpen, onClose, visible = tru
               // Fundo fixo igual ao do tema do xterm. Sem isto, durante o
               // resize o host fica transparente por um instante e o WebView
               // pinta a cor de seleção do sistema — era o "tudo azul".
-              background: "#0B0F16",
+              background: T.terminal,
             }}
           />
         ))}
@@ -254,9 +273,9 @@ export function DeviceTerminalActions({ ip, label, services, onOpen }) {
           className="inline-flex items-center gap-1.5 rounded-md px-2.5 h-8 text-sm"
           style={{
             ...sans,
-            background: C.raised,
-            color: s.warn ? "#FFC94D" : C.dim,
-            border: `1px solid ${s.warn ? "#FFC94D44" : C.line}`,
+            background: T.raised,
+            color: s.warn ? SEVERITY.medium : T.dim,
+            border: `1px solid ${s.warn ? SEVERITY.medium : T.border}`,
           }}>
           <TerminalSquare size={13} />
           {KIND_LABEL[s.kind]}

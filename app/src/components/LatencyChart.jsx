@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
+import { T, SEVERITY, resolveColor } from "../lib/theme";
+import { useTheme } from "../lib/useTheme";
 
 /**
  * Gráfico de latência ao vivo, em canvas via uPlot.
@@ -10,9 +12,18 @@ import "uplot/dist/uPlot.min.css";
  * de 24h, são dezenas de milhares de pontos — território onde SVG trava e
  * canvas nem sente.
  */
-const COLORS = ["#00C2FF", "#7C3AED", "#35D07F", "#FFC94D", "#FF8A3D"];
+/**
+ * Cores das séries, RESOLVIDAS.
+ *
+ * uPlot pinta em canvas e não aceita `var(--x)`. Função em vez de constante
+ * para reler quando o tema mudar — o gráfico é recriado nessa hora.
+ */
+function seriesColors() {
+  return [T.accent, T.accent2, T.ok, SEVERITY.medium, SEVERITY.high].map(resolveColor);
+}
 
 export default function LatencyChart({ series, height = 220 }) {
+  const { theme } = useTheme();
   const ref = useRef(null);
   const plot = useRef(null);
 
@@ -36,25 +47,27 @@ export default function LatencyChart({ series, height = 220 }) {
       },
       axes: [
         {
-          stroke: "#6B7688",
-          grid: { stroke: "#19212E" },
-          ticks: { stroke: "#222C3C" },
+          stroke: resolveColor(T.faint),
+          grid: { stroke: resolveColor(T.borderSubtle) },
+          ticks: { stroke: resolveColor(T.border) },
           font: "11px Inter, sans-serif",
         },
         {
-          stroke: "#6B7688",
-          grid: { stroke: "#19212E" },
-          ticks: { stroke: "#222C3C" },
+          stroke: resolveColor(T.faint),
+          grid: { stroke: resolveColor(T.borderSubtle) },
+          ticks: { stroke: resolveColor(T.border) },
           font: "11px 'JetBrains Mono', monospace",
           size: 52,
           values: (_u, vals) => vals.map((v) => `${v} ms`),
         },
       ],
-      series: [
+      series: (() => {
+        const colors = seriesColors();
+        return [
         {},
         ...series.map((s, i) => ({
           label: s.label,
-          stroke: COLORS[i % COLORS.length],
+          stroke: colors[i % colors.length],
           width: 1.6,
           // Ponto perdido (null) vira lacuna, não linha até zero: uma linha
           // caindo a zero mentiria dizendo "latência baixíssima".
@@ -63,7 +76,8 @@ export default function LatencyChart({ series, height = 220 }) {
           // como linha pura é invisível.
           points: { show: (u) => u.data[0].length < 10, size: 4 },
         })),
-      ],
+      ];
+      })(),
     };
 
     plot.current = new uPlot(opts, toData(series), ref.current);
@@ -76,7 +90,10 @@ export default function LatencyChart({ series, height = 220 }) {
     return () => { ro.disconnect(); plot.current?.destroy(); };
     // Recria só quando o CONJUNTO de séries muda (alvo novo), não a cada ponto.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series.map((s) => s.targetId).join(","), height]);
+    // `theme` na dependência: uPlot pinta em canvas com cor resolvida, então
+    // trocar de tema exige recriar o gráfico. É barato — algumas centenas de
+    // pontos — e acontece só na troca.
+  }, [series.map((s) => s.targetId).join(","), height, theme]);
 
   // Atualização de dados sem recriar o gráfico: barato e fluido.
   useEffect(() => {

@@ -9,7 +9,8 @@
  * O shimmer é um gradiente que se move via animação CSS, definida no index.css.
  */
 
-const C = { raised: "#161D29", shimmer: "#1E2735" };
+import { T } from "../lib/theme";
+
 
 /** Bloco base com o brilho deslizante. */
 export function SkelBlock({ w = "100%", h = 14, radius = 6, style = {} }) {
@@ -17,7 +18,7 @@ export function SkelBlock({ w = "100%", h = 14, radius = 6, style = {} }) {
     <span style={{
       display: "block",
       width: w, height: h, borderRadius: radius,
-      background: `linear-gradient(90deg, ${C.raised} 25%, ${C.shimmer} 50%, ${C.raised} 75%)`,
+      background: `linear-gradient(90deg, ${T.skelBase} 25%, ${T.skelShine} 50%, ${T.skelBase} 75%)`,
       backgroundSize: "200% 100%",
       animation: "skel-shimmer 1.3s ease-in-out infinite",
       ...style,
@@ -28,10 +29,10 @@ export function SkelBlock({ w = "100%", h = 14, radius = 6, style = {} }) {
 /** Linha de tabela de dispositivos: ícone, nome, IP, colunas. */
 export function SkeletonDeviceList({ rows = 8 }) {
   return (
-    <div className="rounded-lg overflow-hidden" style={{ background: "#0F141D", border: "1px solid #222C3C" }}>
+    <div className="rounded-lg overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 px-4 h-14"
-          style={{ borderBottom: "1px solid #19212E", opacity: 1 - i * 0.06 }}>
+          style={{ borderBottom: `1px solid ${T.borderSubtle}`, opacity: 1 - i * 0.06 }}>
           <SkelBlock w={15} h={15} radius={4} />
           <div className="flex-1 flex flex-col gap-1.5">
             <SkelBlock w={140} h={12} />
@@ -53,14 +54,14 @@ export function SkeletonDashboard() {
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-lg p-4" style={{ background: "#0F141D", border: "1px solid #222C3C" }}>
+          <div key={i} className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
             <SkelBlock w={90} h={10} />
             <SkelBlock w={60} h={26} radius={6} style={{ marginTop: 12 }} />
             <SkelBlock w={100} h={9} style={{ marginTop: 10 }} />
           </div>
         ))}
       </div>
-      <div className="rounded-lg p-4" style={{ background: "#0F141D", border: "1px solid #222C3C" }}>
+      <div className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
         <SkelBlock w={180} h={12} />
         <SkelBlock w="100%" h={240} radius={8} style={{ marginTop: 14 }} />
       </div>
@@ -71,10 +72,10 @@ export function SkeletonDashboard() {
 /** Detalhe de dispositivo carregando (portas, achados). */
 export function SkeletonList({ rows = 4 }) {
   return (
-    <div className="rounded-lg overflow-hidden" style={{ background: "#0F141D", border: "1px solid #222C3C" }}>
+    <div className="rounded-lg overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 px-4 h-11"
-          style={{ borderBottom: "1px solid #19212E", opacity: 1 - i * 0.1 }}>
+          style={{ borderBottom: `1px solid ${T.borderSubtle}`, opacity: 1 - i * 0.1 }}>
           <SkelBlock w={40} h={12} />
           <SkelBlock w={90} h={12} />
           <SkelBlock w={200} h={12} />

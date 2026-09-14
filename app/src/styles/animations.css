@@ -1,0 +1,222 @@
+/*
+ * ============================================================================
+ *  Animações do SentinelStack
+ *
+ *  CRITÉRIO: animação deve EXPLICAR, não decorar.
+ *
+ *  Isto é uma ferramenta de trabalho. Quem usa passa turno inteiro nela, e
+ *  animação que encanta na primeira semana irrita na terceira. Então cada
+ *  animação aqui responde a uma pergunta concreta:
+ *
+ *    - "meu clique registrou?"        → resposta tátil no botão
+ *    - "de onde eu vim?"              → continuidade na troca de tela
+ *    - "o que mudou agora?"           → entrada de item novo, saída de resolvido
+ *    - "está acontecendo algo?"       → pulso no indicador ao vivo
+ *
+ *  O que NÃO existe aqui de propósito: animação de entrada em painel a cada
+ *  render, ícone que pulsa sem motivo, transição longa em qualquer lugar.
+ *
+ *  TODAS usam as variáveis --dur-* de tokens.css. Em
+ *  `prefers-reduced-motion: reduce` essas variáveis viram 0ms e o app inteiro
+ *  fica estático de uma vez — sem precisar desligar cada animação.
+ * ============================================================================
+ */
+
+/* ---------------------------------------------------------------------------
+ *  Keyframes
+ * ------------------------------------------------------------------------- */
+
+/* Entrada de conteúdo ao trocar de tela. Deslocamento pequeno (6px): o
+   suficiente para o olho perceber direção, pouco o bastante para não parecer
+   que a tela pulou. */
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Item novo entrando numa lista, como um dispositivo descoberto durante a
+   varredura. Vem da esquerda para sugerir "chegou agora". */
+@keyframes row-enter {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Achado resolvido saindo. Encolhe em vez de só desaparecer, para o olho
+   acompanhar a linha sumindo e as de baixo subindo. */
+@keyframes row-leave {
+  from { opacity: 1; max-height: 100px; }
+  to   { opacity: 0; max-height: 0; }
+}
+
+/* Pulso do indicador "ao vivo". Sutil de propósito: é confirmação de que o
+   dado está chegando, não um alarme. */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* Halo que expande e desaparece, para chamar atenção a um achado crítico novo.
+   Roda UMA vez e para: repetir indefinidamente vira ruído que a pessoa aprende
+   a ignorar. */
+@keyframes attention-ring {
+  0%   { box-shadow: 0 0 0 0 var(--sev-critical); opacity: 0.6; }
+  100% { box-shadow: 0 0 0 12px transparent; opacity: 0; }
+}
+
+/* Brilho do skeleton. Já existia; movido para cá junto das outras. */
+@keyframes skel-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Giro contínuo, para o radar da varredura. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------------------------
+ *  Classes utilitárias
+ * ------------------------------------------------------------------------- */
+
+.anim-view-enter {
+  animation: view-enter var(--dur-base) var(--ease);
+}
+
+.anim-row-enter {
+  animation: row-enter var(--dur-base) var(--ease);
+}
+
+.anim-live {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+.anim-attention {
+  animation: attention-ring 1.2s var(--ease) 1;
+}
+
+/* ---------------------------------------------------------------------------
+ *  Micro-resposta ao toque
+ *
+ *  A camada mais importante e a menos visível. É o que faz o app parecer
+ *  sólido em vez de uma página estática: cada elemento clicável responde.
+ * ------------------------------------------------------------------------- */
+
+/* Todo botão ganha transição de cor e um afundamento de 1px no clique.
+   O :active é o que dá a sensação tátil — sem ele, o clique parece não
+   registrar em máquina lenta. */
+button {
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Linha de tabela e item de lista: fundo reage ao hover.
+   Aplicado por atributo para não afetar botão de ação dentro da linha. */
+[data-row]:hover {
+  background-color: var(--surface-hover);
+}
+
+[data-row] {
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+/* Foco por TECLADO visível, e só por teclado.
+ *
+ * `:focus-visible` em vez de `:focus`: o anel aparece para quem navega com Tab
+ * e não para quem clica com o mouse. Sem isso, ou o app é inacessível por
+ * teclado, ou fica com anel piscando a cada clique.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Campos de texto reagem ao foco com a cor de destaque, como se espera. */
+input,
+textarea,
+select {
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent) !important;
+}
+
+/* Link e elemento com cursor de ponteiro: cor transita. */
+a {
+  transition: color var(--dur-fast) var(--ease);
+}
+
+/* ---------------------------------------------------------------------------
+ *  Troca de tema sem piscar
+ *
+ *  Ao trocar de tema, as superfícies fazem uma transição curta de cor em vez
+ *  de trocar num piscar. Aplicado só a fundo e borda: transicionar TODAS as
+ *  propriedades seria caro e faria o layout parecer mole.
+ *
+ *  Vale para superfícies, não para texto: texto mudando de cor gradualmente
+ *  fica ilegível no meio da transição.
+ * ------------------------------------------------------------------------- */
+[data-theme] * {
+  transition:
+    background-color var(--dur-base) var(--ease),
+    border-color var(--dur-base) var(--ease);
+}
+
+/* Exceção: o que já tem transição própria não deve ser sobrescrito, e o canvas
+   do terminal e dos gráficos não deve transicionar nada. */
+.xterm,
+.xterm *,
+.u-wrap,
+.u-wrap * {
+  transition: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+ *  Respeitar "menos movimento" de verdade
+ *
+ *  As variáveis --dur-* zeradas cobrem tudo que usa transição, mas NÃO cobrem
+ *  duas coisas: o `animate-spin` do Tailwind e o shimmer do skeleton, que têm
+ *  duração fixa própria. Aqui elas são neutralizadas explicitamente.
+ *
+ *  O giro do radar é o caso mais importante: é um elemento em rotação contínua
+ *  no centro da tela durante um minuto de varredura, exatamente o tipo de
+ *  movimento que causa desconforto vestibular.
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  [class*="anim-"],
+  [style*="skel-shimmer"] {
+    animation: none !important;
+  }
+
+  /* Sem o brilho deslizante, o skeleton fica como bloco estático — continua
+     comunicando "carregando" pela forma, sem movimento. */
+  [style*="skel-shimmer"] {
+    background: var(--skel-base) !important;
+  }
+
+  /* Transições zeradas por completo, inclusive as de troca de tema. */
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}

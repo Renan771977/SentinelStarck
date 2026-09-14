@@ -36,7 +36,7 @@ export function useSentinel(initialInterface = "") {
   const [cidr, setCidr] = useState("");
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [interfaces, setInterfaces] = useState<InterfaceInfo[]>([]);
-  const [devices, setDevices] = useState<DeviceRow[]>([]);
+  const [devices, setDevices] = useState<Array<DeviceRow & { justFound?: boolean }>>([]);
   const [changes, setChanges] = useState<ChangeRow[]>([]);
   const [findings, setFindings] = useState<FindingInfo[]>([]);
   /** Indexado por id para lookup direto na tela de Achados. */
@@ -50,7 +50,9 @@ export function useSentinel(initialInterface = "") {
   // repassar para o estado evita re-render a cada evento: numa /24 são até
   // 254 eventos em poucos segundos, e atualizar o estado em todos trava a
   // interface justamente quando ela deveria parecer fluida.
-  const buffer = useRef<Map<string, DeviceRow>>(new Map());
+  // `justFound` é acrescentado em memória durante a varredura; não vem do
+  // banco. Por isso o tipo local em vez de DeviceRow puro.
+  const buffer = useRef<Map<string, DeviceRow & { justFound?: boolean }>>(new Map());
   const flushTimer = useRef<number | null>(null);
 
   const flush = useCallback(() => {
@@ -123,7 +125,10 @@ export function useSentinel(initialInterface = "") {
     }).then((u) => unsubs.push(u));
 
     events.onScanDevice((e) => {
-      buffer.current.set(e.device.id, e.device);
+      // Marca quem foi descoberto AGORA. A flag é só de apresentação: serve
+      // para a linha entrar animada uma vez, e é descartada no recarregamento
+      // do fim da varredura.
+      buffer.current.set(e.device.id, { ...e.device, justFound: true });
       flush();
     }).then((u) => unsubs.push(u));
 

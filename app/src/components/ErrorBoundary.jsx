@@ -1,13 +1,7 @@
 import { Component } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
+import { T, SEVERITY, sans, mono } from "../lib/theme";
 
-const C = {
-  panel: "#0F141D", raised: "#161D29", line: "#222C3C",
-  text: "#E8ECF4", dim: "#9AA5B8", faint: "#6B7688", cyan: "#00C2FF",
-  critical: "#FF4D6D",
-};
-const sans = { fontFamily: "Inter,-apple-system,'Segoe UI',sans-serif" };
-const mono = { fontFamily: "'JetBrains Mono','SFMono-Regular',Consolas,monospace" };
 
 /**
  * Captura erro de renderização de qualquer componente abaixo dele.
@@ -62,27 +56,27 @@ export default class ErrorBoundary extends Component {
     if (!error) return this.props.children;
 
     return (
-      <div className="rounded-lg p-6" style={{ background: C.panel, border: `1px solid ${C.critical}44` }}>
+      <div className="rounded-lg p-6" style={{ background: T.surface, border: `1px solid ${SEVERITY.critical}44` }}>
         <div className="flex items-start gap-3">
-          <div className="rounded-md p-2 shrink-0" style={{ background: `${C.critical}18` }}>
-            <AlertTriangle size={18} style={{ color: C.critical }} />
+          <div className="rounded-md p-2 shrink-0" style={{ background: `${SEVERITY.critical}18` }}>
+            <AlertTriangle size={18} style={{ color: SEVERITY.critical }} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium" style={{ ...sans, color: C.text }}>
+            <p className="text-sm font-medium" style={{ ...sans, color: T.text }}>
               Algo deu errado{this.props.scope ? ` em ${this.props.scope}` : " nesta parte"}
             </p>
-            <p className="text-sm mt-1" style={{ ...sans, color: C.dim, maxWidth: "70ch" }}>
+            <p className="text-sm mt-1" style={{ ...sans, color: T.dim, maxWidth: "70ch" }}>
               O resto do aplicativo continua funcionando. Você pode tentar recarregar esta
               seção. Se o problema persistir, reinicie o aplicativo.
             </p>
-            <div className="rounded-md p-2.5 mt-3" style={{ background: C.raised, border: `1px solid ${C.line}` }}>
-              <p style={{ ...mono, color: C.faint, fontSize: 12, wordBreak: "break-word" }}>
+            <div className="rounded-md p-2.5 mt-3" style={{ background: T.raised, border: `1px solid ${T.border}` }}>
+              <p style={{ ...mono, color: T.faint, fontSize: 12, wordBreak: "break-word" }}>
                 {String(error.message || error)}
               </p>
             </div>
             <button onClick={this.reset}
               className="inline-flex items-center gap-1.5 rounded-md px-3 h-8 text-sm mt-3"
-              style={{ ...sans, background: C.raised, color: C.text, border: `1px solid ${C.line}` }}>
+              style={{ ...sans, background: T.raised, color: T.text, border: `1px solid ${T.border}` }}>
               <RotateCw size={13} /> Tentar de novo
             </button>
           </div>

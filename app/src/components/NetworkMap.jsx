@@ -4,18 +4,11 @@ import {
   CircleHelp, Smartphone, ShieldAlert, Globe, Search, ZoomIn, ZoomOut,
   Maximize2, Clock, Fingerprint, AlertTriangle,
 } from "lucide-react";
+import { T, SEVERITY, SEVERITY_BY_RANK, sans, mono } from "../lib/theme";
 
 /* ------------------------------------------------------------------ */
 /*  Tokens                                                             */
 /* ------------------------------------------------------------------ */
-const C = {
-  bg: "#0B0F16", panel: "#0F141D", raised: "#161D29", line: "#222C3C",
-  lineSoft: "#19212E", text: "#E8ECF4", dim: "#9AA5B8", faint: "#6B7688",
-  cyan: "#00C2FF", purple: "#7C3AED", ok: "#35D07F",
-};
-const SEV_COLOR = ["#FF4D6D", "#FF8A3D", "#FFC94D", "#4DA8FF", "#7D8899"];
-const sans = { fontFamily: "Inter,-apple-system,'Segoe UI',sans-serif" };
-const mono = { fontFamily: "'JetBrains Mono','SFMono-Regular',Consolas,monospace" };
 
 const ICON = {
   router: Router, switch: Cable, firewall: Cable, server: Server,
@@ -70,12 +63,12 @@ function isOffHours(epoch) {
 /** Marcas que merecem atenção. Ordem = prioridade de exibição. */
 function signalsOf(d, now) {
   const out = [];
-  if (d.firstSeen && now - d.firstSeen < 86400) out.push({ id: "novo", label: "Novo nas últimas 24h", color: C.purple });
-  if (isOffHours(d.firstSeen)) out.push({ id: "fora", label: "Apareceu fora do expediente", color: "#FFC94D" });
-  if (isRandomizedMac(d.mac)) out.push({ id: "mac", label: "MAC randomizado", color: "#FF8A3D" });
-  if (d.identityConfidence === "low") out.push({ id: "conf", label: "Identidade de baixa confiança", color: "#FF8A3D" });
-  if ((d.ipHistoryCount || 0) > 2) out.push({ id: "ips", label: `Já usou ${d.ipHistoryCount} endereços`, color: "#4DA8FF" });
-  if (d.missCount > 0) out.push({ id: "off", label: "Ausente na última varredura", color: C.faint });
+  if (d.firstSeen && now - d.firstSeen < 86400) out.push({ id: "novo", label: "Novo nas últimas 24h", color: T.accent2 });
+  if (isOffHours(d.firstSeen)) out.push({ id: "fora", label: "Apareceu fora do expediente", color: SEVERITY.medium });
+  if (isRandomizedMac(d.mac)) out.push({ id: "mac", label: "MAC randomizado", color: SEVERITY.high });
+  if (d.identityConfidence === "low") out.push({ id: "conf", label: "Identidade de baixa confiança", color: SEVERITY.high });
+  if ((d.ipHistoryCount || 0) > 2) out.push({ id: "ips", label: `Já usou ${d.ipHistoryCount} endereços`, color: SEVERITY.low });
+  if (d.missCount > 0) out.push({ id: "off", label: "Ausente na última varredura", color: T.faint });
   return out;
 }
 
@@ -88,13 +81,13 @@ const fmt = (e) =>
 /*  Geometria                                                          */
 /* ------------------------------------------------------------------ */
 const CELL_W = 132;
-const CELL_H = 96;
+const CELL_H = 100;
 const MARGIN_X = 130;
-const BAND_HEADER = 26;
+const BAND_HEADER = 34;
 const TOP_INTERNET = 46;
 const TOP_GATEWAY = 132;
 const BUS_Y = 212;
-const FIRST_BAND = 252;
+const FIRST_BAND = 268;
 const WIDTH = 1240;
 
 function layout(devices, gateway, now) {
@@ -128,20 +121,20 @@ function Node({ node, size = 21, selected, dimmed, onSelect }) {
   const { d, x, y, signals } = node;
   const Icon = ICON[d.kind] || CircleHelp;
   const sev = d.worstSeverityRank !== null && d.worstSeverityRank !== undefined
-    ? SEV_COLOR[d.worstSeverityRank] : null;
+    ? SEVERITY[SEVERITY_BY_RANK[d.worstSeverityRank]] : null;
   const offline = d.missCount > 0;
   const lowConf = d.identityConfidence === "low";
 
-  const ring = sev || (selected ? C.cyan : C.line);
+  const ring = sev || (selected ? T.accent : T.border);
 
   return (
     <g onClick={() => onSelect(d)} style={{ cursor: "pointer", opacity: dimmed ? 0.18 : 1 }}>
       {selected && (
-        <circle cx={x} cy={y} r={size + 7} fill="none" stroke={C.cyan} strokeWidth="1" opacity="0.5" />
+        <circle cx={x} cy={y} r={size + 7} fill="none" stroke={T.accent} strokeWidth="1" opacity="0.5" />
       )}
       <circle
         cx={x} cy={y} r={size}
-        fill={offline ? "#10151F" : C.raised}
+        fill={offline ? "var(--surface-offline)" : T.raised}
         stroke={ring}
         strokeWidth={sev ? 2.2 : 1.4}
         // Traço interrompido quando a identidade é fraca. A forma carrega a
@@ -149,25 +142,25 @@ function Node({ node, size = 21, selected, dimmed, onSelect }) {
         // continua vendo que aquele nó é diferente.
         strokeDasharray={lowConf ? "3 3" : undefined}
       />
-      <g transform={`translate(${x - 9}, ${y - 9})`} style={{ color: offline ? C.faint : C.dim }}>
+      <g transform={`translate(${x - 9}, ${y - 9})`} style={{ color: offline ? T.faint : T.dim }}>
         <Icon size={18} />
       </g>
 
       {/* IP COMPLETO, sempre. Endereço abreviado é inútil em investigação:
           o número inteiro é o que vai para o relatório e para o log. */}
       <text x={x} y={y + size + 15} textAnchor="middle"
-        style={{ ...mono, fontSize: 11, fill: offline ? C.faint : C.text }}>
+        style={{ ...mono, fontSize: 11, fill: offline ? T.faint : T.text }}>
         {d.ip || "sem IP"}
       </text>
       <text x={x} y={y + size + 28} textAnchor="middle"
-        style={{ ...sans, fontSize: 10, fill: C.faint }}>
+        style={{ ...sans, fontSize: 10, fill: T.faint }}>
         {(d.label || d.hostname || d.vendor || KIND_LABEL[d.kind] || "").slice(0, 18)}
       </text>
 
       {/* Marcas de investigação, empilhadas na borda superior direita. */}
       {signals.slice(0, 3).map((s, i) => (
         <circle key={s.id} cx={x + size - 3 - i * 8} cy={y - size + 3} r="3.5"
-          fill={s.color} stroke={C.bg} strokeWidth="1">
+          fill={s.color} stroke={T.bg} strokeWidth="1">
           <title>{s.label}</title>
         </circle>
       ))}
@@ -233,15 +226,15 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
       {/* ---- controles ---- */}
       <div className="flex items-center gap-3 flex-wrap shrink-0">
         <div className="flex items-center gap-2 rounded-md px-3 h-9"
-          style={{ background: C.panel, border: `1px solid ${C.line}`, minWidth: 260 }}>
-          <Search size={14} style={{ color: C.faint }} />
+          style={{ background: T.surface, border: `1px solid ${T.border}`, minWidth: 260 }}>
+          <Search size={14} style={{ color: T.faint }} />
           <input value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Destacar por IP, MAC, nome ou fabricante"
             className="bg-transparent outline-none flex-1 text-sm"
-            style={{ ...sans, color: C.text }} />
+            style={{ ...sans, color: T.text }} />
         </div>
 
-        <div className="flex gap-1 rounded-md p-1" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+        <div className="flex gap-1 rounded-md p-1" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
           {[
             ["all", "Todos"],
             ["risk", "Com risco"],
@@ -249,7 +242,7 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
             ["offline", "Ausentes"],
           ].map(([id, lbl]) => (
             <button key={id} onClick={() => setFilter(id)} className="px-2.5 h-7 rounded text-xs"
-              style={{ ...sans, background: filter === id ? C.raised : "transparent", color: filter === id ? C.text : C.faint }}>
+              style={{ ...sans, background: filter === id ? T.raised : "transparent", color: filter === id ? T.text : T.faint }}>
               {lbl}
             </button>
           ))}
@@ -258,30 +251,30 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
         {/* Linha do tempo. "Quem entrou na rede desde então" é a pergunta
             que abre quase toda investigação de incidente. */}
         <div className="flex items-center gap-2 rounded-md px-3 h-9"
-          style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-          <Clock size={13} style={{ color: C.faint }} />
+          style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+          <Clock size={13} style={{ color: T.faint }} />
           <select value={sinceHours} onChange={(e) => setSinceHours(Number(e.target.value))}
-            className="bg-transparent outline-none text-sm" style={{ ...sans, color: C.text }}>
-            <option value={0} style={{ background: C.panel }}>Todo o histórico</option>
-            <option value={1} style={{ background: C.panel }}>Novos na última hora</option>
-            <option value={24} style={{ background: C.panel }}>Novos em 24 horas</option>
-            <option value={168} style={{ background: C.panel }}>Novos em 7 dias</option>
+            className="bg-transparent outline-none text-sm" style={{ ...sans, color: T.text }}>
+            <option value={0} style={{ background: T.surface }}>Todo o histórico</option>
+            <option value={1} style={{ background: T.surface }}>Novos na última hora</option>
+            <option value={24} style={{ background: T.surface }}>Novos em 24 horas</option>
+            <option value={168} style={{ background: T.surface }}>Novos em 7 dias</option>
           </select>
         </div>
 
         <div className="flex items-center gap-1 ml-auto">
           <button onClick={() => setZoom((z) => Math.max(0.35, z - 0.2))}
             className="rounded-md flex items-center justify-center"
-            style={{ width: 30, height: 30, background: C.panel, border: `1px solid ${C.line}`, color: C.dim }}>
+            style={{ width: 30, height: 30, background: T.surface, border: `1px solid ${T.border}`, color: T.dim }}>
             <ZoomOut size={14} />
           </button>
           <button onClick={() => setZoom((z) => Math.min(2.5, z + 0.2))}
             className="rounded-md flex items-center justify-center"
-            style={{ width: 30, height: 30, background: C.panel, border: `1px solid ${C.line}`, color: C.dim }}>
+            style={{ width: 30, height: 30, background: T.surface, border: `1px solid ${T.border}`, color: T.dim }}>
             <ZoomIn size={14} />
           </button>
           <button onClick={reset} className="rounded-md flex items-center justify-center"
-            style={{ width: 30, height: 30, background: C.panel, border: `1px solid ${C.line}`, color: C.dim }}
+            style={{ width: 30, height: 30, background: T.surface, border: `1px solid ${T.border}`, color: T.dim }}
             title="Enquadrar">
             <Maximize2 size={13} />
           </button>
@@ -290,28 +283,47 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
 
       {/* ---- tela ---- */}
       <div className="flex-1 min-h-0 rounded-lg overflow-hidden relative"
-        style={{ background: C.bg, border: `1px solid ${C.line}` }}
+        style={{ background: T.bg, border: `1px solid ${T.border}` }}
         onWheel={onWheel} onMouseDown={onDown} onMouseMove={onMove}
         onMouseUp={stop} onMouseLeave={stop}>
 
-        <svg width="100%" height="100%" style={{ cursor: drag.current ? "grabbing" : "grab" }}>
+        {/* viewBox é o que faz o desenho ESCALAR com o painel.
+            Sem ele, as coordenadas são pixels absolutos: o conteúdo é
+            desenhado para 1240px de largura e fica comprimido ou cortado em
+            qualquer outro tamanho. `preserveAspectRatio` ancorado no topo
+            evita o desenho flutuar no meio quando há poucos dispositivos. */}
+        <svg
+          width="100%" height="100%"
+          viewBox={`0 0 ${WIDTH} ${Math.max(height, 420)}`}
+          preserveAspectRatio="xMidYMin meet"
+          style={{ cursor: drag.current ? "grabbing" : "grab", display: "block" }}>
           <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
             {/* Internet. Desenhada porque o gateway tem rota padrão; é a única
                 ligação vertical que podemos afirmar. */}
             <g>
               <rect x={WIDTH / 2 - 78} y={TOP_INTERNET - 20} width="156" height="40" rx="20"
-                fill={C.panel} stroke={C.line} strokeWidth="1" />
-              <g transform={`translate(${WIDTH / 2 - 58}, ${TOP_INTERNET - 9})`} style={{ color: C.faint }}>
+                fill={T.surface} stroke={T.border} strokeWidth="1" />
+              <g transform={`translate(${WIDTH / 2 - 58}, ${TOP_INTERNET - 9})`} style={{ color: T.faint }}>
                 <Globe size={18} />
               </g>
               <text x={WIDTH / 2 + 12} y={TOP_INTERNET + 5} textAnchor="middle"
-                style={{ ...sans, fontSize: 12, fill: C.dim }}>Internet</text>
+                style={{ ...sans, fontSize: 12, fill: T.dim }}>Internet</text>
             </g>
+
+            {!gateway && (
+              /* Sem roteador identificado, não há como ligar a Internet ao
+                 segmento. Dizer isso é mais honesto que desenhar uma linha
+                 para o nada. */
+              <text x={WIDTH / 2} y={TOP_GATEWAY + 6} textAnchor="middle"
+                style={{ ...sans, fontSize: 12, fill: T.faint }}>
+                Gateway não identificado nesta varredura
+              </text>
+            )}
 
             {gateway && (
               <>
                 <line x1={WIDTH / 2} y1={TOP_INTERNET + 20} x2={WIDTH / 2} y2={TOP_GATEWAY - 24}
-                  stroke={C.line} strokeWidth="1.5" />
+                  stroke={T.border} strokeWidth="1.5" />
                 <Node
                   node={{ d: gateway, x: WIDTH / 2, y: TOP_GATEWAY, signals: gwSignals }}
                   size={25}
@@ -320,7 +332,7 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
                   onSelect={setSelected}
                 />
                 <line x1={WIDTH / 2} y1={TOP_GATEWAY + 44} x2={WIDTH / 2} y2={BUS_Y}
-                  stroke={C.line} strokeWidth="1.5" />
+                  stroke={T.border} strokeWidth="1.5" />
               </>
             )}
 
@@ -329,24 +341,27 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
                 dispositivos responderam ARP, logo estão no mesmo domínio de
                 broadcast. Desenhar uma árvore com switches no meio seria
                 inventar caminho que não foi medido — inaceitável em perícia. */}
-            <line x1={40} y1={BUS_Y} x2={WIDTH - 40} y2={BUS_Y} stroke={C.cyan} strokeWidth="2.5" opacity="0.55" />
-            <line x1={40} y1={BUS_Y + 4} x2={WIDTH - 40} y2={BUS_Y + 4} stroke={C.cyan} strokeWidth="1" opacity="0.2" />
-            <rect x={40} y={BUS_Y - 13} width={296} height="26" rx="13" fill={C.bg} stroke={C.cyan} strokeWidth="1" opacity="0.9" />
-            <text x={54} y={BUS_Y + 5} style={{ ...mono, fontSize: 11, fill: C.cyan }}>
+            <line x1={40} y1={BUS_Y} x2={WIDTH - 40} y2={BUS_Y} stroke={T.accent} strokeWidth="2.5" opacity="0.55" />
+            <line x1={40} y1={BUS_Y + 4} x2={WIDTH - 40} y2={BUS_Y + 4} stroke={T.accent} strokeWidth="1" opacity="0.2" />
+            <rect x={40} y={BUS_Y - 13} width={296} height="26" rx="13" fill={T.bg} stroke={T.accent} strokeWidth="1" opacity="0.9" />
+            <text x={54} y={BUS_Y + 5} style={{ ...mono, fontSize: 11, fill: T.accent }}>
               {cidr || "segmento local"}
             </text>
-            <text x={54 + 108} y={BUS_Y + 5} style={{ ...sans, fontSize: 11, fill: C.dim }}>
+            <text x={54 + 108} y={BUS_Y + 5} style={{ ...sans, fontSize: 11, fill: T.dim }}>
               segmento L2 · {visible.length} dispositivos
             </text>
 
             {/* Faixas */}
             {bands.map((band) => (
               <g key={band.id}>
-                <line x1={40} y1={band.y} x2={WIDTH - 40} y2={band.y} stroke={C.lineSoft} strokeWidth="1" />
-                <text x={44} y={band.y + 16} style={{ ...sans, fontSize: 11, fill: C.faint }}>
+                <line x1={40} y1={band.y} x2={WIDTH - 40} y2={band.y} stroke={T.borderSubtle} strokeWidth="1" />
+                {/* Rótulo e contagem na mesma linha, acima dos nós: em coluna
+                    eles invadiam a primeira fileira de dispositivos. */}
+                <text x={44} y={band.y + 20} style={{ ...sans, fontSize: 11, fill: T.faint }}>
                   {band.label}
                 </text>
-                <text x={44} y={band.y + 30} style={{ ...mono, fontSize: 10, fill: C.faint, opacity: 0.7 }}>
+                <text x={44 + band.label.length * 6.5 + 12} y={band.y + 20}
+                  style={{ ...mono, fontSize: 10, fill: T.faint, opacity: 0.65 }}>
                   {band.count}
                 </text>
                 {band.nodes.map((n) => (
@@ -360,7 +375,7 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
 
             {visible.length === 0 && (
               <text x={WIDTH / 2} y={FIRST_BAND + 60} textAnchor="middle"
-                style={{ ...sans, fontSize: 13, fill: C.faint }}>
+                style={{ ...sans, fontSize: 13, fill: T.faint }}>
                 Nenhum dispositivo no filtro atual.
               </text>
             )}
@@ -369,24 +384,28 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
           </g>
         </svg>
 
-        {/* ---- legenda ---- */}
-        <div className="absolute left-3 bottom-3 rounded-md px-3 py-2 flex flex-col gap-1.5"
-          style={{ background: `${C.panel}F2`, border: `1px solid ${C.line}` }}>
-          <p className="text-xs" style={{ ...sans, color: C.faint }}>Anel: pior achado · Traço cortado: identidade fraca</p>
-          <div className="flex items-center gap-3 flex-wrap" style={{ maxWidth: 460 }}>
-            {[
-              [C.purple, "novo em 24h"],
-              ["#FFC94D", "fora do expediente"],
-              ["#FF8A3D", "MAC randomizado"],
-              ["#4DA8FF", "trocou de IP"],
-            ].map(([col, lbl]) => (
-              <span key={lbl} className="flex items-center gap-1.5">
-                <span className="rounded-full" style={{ width: 7, height: 7, background: col }} />
-                <span className="text-xs" style={{ ...sans, color: C.faint }}>{lbl}</span>
-              </span>
-            ))}
-          </div>
-        </div>
+      </div>
+
+      {/* ---- legenda ----
+          Fora da área de desenho, como rodapé. Antes era sobreposta ao SVG e
+          colidia com os nós quando havia poucos dispositivos. */}
+      <div className="flex items-center gap-4 flex-wrap shrink-0 px-1">
+        <span className="text-xs" style={{ ...sans, color: T.faint }}>
+          Anel: pior achado · Traço cortado: identidade fraca
+        </span>
+        <span className="flex items-center gap-3 flex-wrap">
+          {[
+            [T.accent2, "novo em 24h"],
+            [SEVERITY.medium, "fora do expediente"],
+            [SEVERITY.high, "MAC randomizado"],
+            [SEVERITY.low, "trocou de IP"],
+          ].map(([col, lbl]) => (
+            <span key={lbl} className="flex items-center gap-1.5">
+              <span className="rounded-full" style={{ width: 7, height: 7, background: col }} />
+              <span className="text-xs" style={{ ...sans, color: T.faint }}>{lbl}</span>
+            </span>
+          ))}
+        </span>
       </div>
 
       {/* ---- painel de evidência ---- */}
@@ -395,7 +414,7 @@ export default function NetworkMap({ devices, cidr, onOpen }) {
       )}
 
       {!selected && (
-        <p className="text-xs shrink-0" style={{ ...sans, color: C.faint }}>
+        <p className="text-xs shrink-0" style={{ ...sans, color: T.faint }}>
           A linha horizontal representa o domínio de broadcast, a única topologia que a
           varredura comprova. A hierarquia física dos switches exige SNMP ou LLDP e não é
           desenhada por suposição.
@@ -414,18 +433,18 @@ function EvidencePanel({ d, now, onOpen, onClose }) {
 
   return (
     <div className="rounded-lg p-4 shrink-0"
-      style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+      style={{ background: T.surface, border: `1px solid ${T.border}` }}>
       <div className="flex items-start gap-3">
-        <div className="rounded-md p-2 shrink-0" style={{ background: C.raised }}>
-          <Icon size={18} style={{ color: C.cyan }} />
+        <div className="rounded-md p-2 shrink-0" style={{ background: T.raised }}>
+          <Icon size={18} style={{ color: T.accent }} />
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium" style={{ ...sans, color: C.text }}>
+            <span className="text-sm font-medium" style={{ ...sans, color: T.text }}>
               {d.label || d.hostname || "Dispositivo sem nome"}
             </span>
-            <span className="text-xs" style={{ ...sans, color: C.faint }}>
+            <span className="text-xs" style={{ ...sans, color: T.faint }}>
               {KIND_LABEL[d.kind] || d.kind}
             </span>
             {signals.map((s) => (
@@ -454,19 +473,19 @@ function EvidencePanel({ d, now, onOpen, onClose }) {
         <div className="flex flex-col gap-2 shrink-0">
           <button onClick={() => onOpen(d)}
             className="rounded-md px-3 h-8 text-sm"
-            style={{ ...sans, background: C.raised, color: C.text, border: `1px solid ${C.line}` }}>
+            style={{ ...sans, background: T.raised, color: T.text, border: `1px solid ${T.border}` }}>
             Abrir detalhe
           </button>
-          <button onClick={onClose} className="text-xs" style={{ ...sans, color: C.faint }}>
+          <button onClick={onClose} className="text-xs" style={{ ...sans, color: T.faint }}>
             fechar
           </button>
         </div>
       </div>
 
       {d.findingCount > 0 && (
-        <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: `1px solid ${C.lineSoft}` }}>
-          <ShieldAlert size={14} style={{ color: SEV_COLOR[d.worstSeverityRank ?? 4] }} />
-          <span className="text-sm" style={{ ...sans, color: C.dim }}>
+        <div className="flex items-center gap-2 mt-3 pt-3" style={{ borderTop: `1px solid ${T.borderSubtle}` }}>
+          <ShieldAlert size={14} style={{ color: SEVERITY[SEVERITY_BY_RANK[d.worstSeverityRank ?? 4]] }} />
+          <span className="text-sm" style={{ ...sans, color: T.dim }}>
             {d.findingCount} {d.findingCount === 1 ? "achado aberto" : "achados abertos"} neste dispositivo
           </span>
         </div>
@@ -478,8 +497,8 @@ function EvidencePanel({ d, now, onOpen, onClose }) {
 function Ev({ label, value, m }) {
   return (
     <span className="min-w-0">
-      <span className="text-xs block" style={{ ...sans, color: C.faint }}>{label}</span>
-      <span className="block truncate" style={{ ...(m ? mono : sans), color: C.text, fontSize: 13 }}>
+      <span className="text-xs block" style={{ ...sans, color: T.faint }}>{label}</span>
+      <span className="block truncate" style={{ ...(m ? mono : sans), color: T.text, fontSize: 13 }}>
         {value}
       </span>
     </span>

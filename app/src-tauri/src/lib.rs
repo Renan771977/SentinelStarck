@@ -1040,6 +1040,34 @@ fn open_external(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("não foi possível abrir o navegador: {e}"))
 }
 
+/// Lê uma configuração. A tabela `setting` já existia no schema; usá-la em vez
+/// de armazenamento do navegador mantém a configuração num lugar só e ela
+/// sobrevive a limpeza de cache do WebView.
+#[tauri::command]
+fn setting_get(state: State<'_, AppState>, key: String) -> Result<Option<String>, String> {
+    use rusqlite::OptionalExtension;
+    let conn = state.conn()?;
+    conn.query_row(
+        "SELECT value FROM setting WHERE key = ?1",
+        rusqlite::params![key],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn setting_set(state: State<'_, AppState>, key: String, value: String) -> Result<(), String> {
+    let conn = state.conn()?;
+    conn.execute(
+        "INSERT INTO setting (key, value, updated_at) VALUES (?1, ?2, unixepoch())
+         ON CONFLICT (key) DO UPDATE SET value = ?2, updated_at = unixepoch()",
+        rusqlite::params![key, value],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Informa se o binário foi compilado com o terminal. A interface esconde o
 /// painel quando não, em vez de mostrar botão que devolve erro.
 #[tauri::command]
@@ -1150,6 +1178,8 @@ pub fn run() {
             open_external,
             export_evidence,
             telemetry_history,
+            setting_get,
+            setting_set,
             #[cfg(feature = "terminal")]
             pty_open,
             #[cfg(feature = "terminal")]

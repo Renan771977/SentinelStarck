@@ -15,32 +15,25 @@ import { ScanBanner } from "./components/ScanProgress";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { useToast } from "./lib/toast";
 import { useDialog } from "./lib/dialog";
+import { useTheme } from "./lib/useTheme";
 import { SkeletonDeviceList, SkeletonList, SkeletonDashboard } from "./components/Skeleton";
+import { T, SEVERITY, SEVERITY_SOFT, SEVERITY_BY_RANK, sans, mono } from "./lib/theme";
 
 /* ------------------------------------------------------------------ */
 /*  Tokens                                                             */
 /*  Espelham o tailwind.config.js. Cor vai em style inline porque o    */
 /*  protótipo nasceu assim; migrar para classes Tailwind é opcional.   */
 /* ------------------------------------------------------------------ */
-const C = {
-  app: "#090C12", panel: "#0F141D", raised: "#161D29", hover: "#1B2432",
-  line: "#222C3C", lineSoft: "#19212E",
-  text: "#E8ECF4", dim: "#9AA5B8", faint: "#6B7688",
-  cyan: "#00C2FF", purple: "#7C3AED", ok: "#35D07F",
-};
 
 const SEV = {
-  critical: { label: "Crítica", color: "#FF4D6D", rank: 0 },
-  high: { label: "Alta", color: "#FF8A3D", rank: 1 },
-  medium: { label: "Média", color: "#FFC94D", rank: 2 },
-  low: { label: "Baixa", color: "#4DA8FF", rank: 3 },
-  info: { label: "Info", color: "#7D8899", rank: 4 },
+  critical: { label: "Crítica", color: SEVERITY.critical, rank: 0 },
+  high: { label: "Alta", color: SEVERITY.high, rank: 1 },
+  medium: { label: "Média", color: SEVERITY.medium, rank: 2 },
+  low: { label: "Baixa", color: SEVERITY.low, rank: 3 },
+  info: { label: "Info", color: SEVERITY.info, rank: 4 },
 };
 /** O backend manda `worstSeverityRank` como número. Este é o caminho inverso. */
-const BY_RANK = ["critical", "high", "medium", "low", "info"];
 
-const mono = { fontFamily: "'JetBrains Mono','SFMono-Regular',Consolas,monospace" };
-const sans = { fontFamily: "Inter,-apple-system,'Segoe UI',sans-serif" };
 
 const KIND_ICON = {
   router: Router, switch: Cable, firewall: Cable, server: Server,
@@ -81,10 +74,10 @@ function dateOf(epoch) {
 /* ------------------------------------------------------------------ */
 function Panel({ title, action, children, pad = true }) {
   return (
-    <section className="rounded-lg overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+    <section className="rounded-lg overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
       {title && (
-        <header className="flex items-center justify-between px-4 h-11" style={{ borderBottom: `1px solid ${C.lineSoft}` }}>
-          <h2 className="text-sm font-medium" style={{ ...sans, color: C.text }}>{title}</h2>
+        <header className="flex items-center justify-between px-4 h-11" style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+          <h2 className="text-sm font-medium" style={{ ...sans, color: T.text }}>{title}</h2>
           {action}
         </header>
       )}
@@ -94,12 +87,12 @@ function Panel({ title, action, children, pad = true }) {
 }
 
 function SevDot({ sev, size = 8 }) {
-  const s = SEV[sev] || SEV.info;
+  const s = SEVERITY[sev] || SEVERITY.info;
   return <span className="inline-block rounded-full shrink-0" style={{ width: size, height: size, background: s.color }} />;
 }
 
 function SevTag({ sev }) {
-  const s = SEV[sev] || SEV.info;
+  const s = SEVERITY[sev] || SEVERITY.info;
   return (
     <span className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs"
       style={{ ...sans, color: s.color, background: `${s.color}18`, border: `1px solid ${s.color}33` }}>
@@ -110,16 +103,16 @@ function SevTag({ sev }) {
 
 function ConfTag({ conf }) {
   const map = {
-    confirmed: ["Confirmado", C.ok, Lock], likely: ["Provável", C.dim, Unlock],
-    possible: ["Possível", C.faint, Unlock], high: ["Alta", C.ok, Lock],
-    medium: ["Média", C.dim, Unlock], low: ["Baixa", C.faint, Unlock],
+    confirmed: ["Confirmado", T.ok, Lock], likely: ["Provável", T.dim, Unlock],
+    possible: ["Possível", T.faint, Unlock], high: ["Alta", T.ok, Lock],
+    medium: ["Média", T.dim, Unlock], low: ["Baixa", T.faint, Unlock],
   };
   const [t, col, Icon] = map[conf] || map.possible;
   return <span className="inline-flex items-center gap-1 text-xs" style={{ ...sans, color: col }}><Icon size={11} />{t}</span>;
 }
 
 function Mono({ children, dim }) {
-  return <span style={{ ...mono, color: dim ? C.dim : C.text, fontSize: 13 }}>{children}</span>;
+  return <span style={{ ...mono, color: dim ? T.dim : T.text, fontSize: 13 }}>{children}</span>;
 }
 
 /** Estado vazio. Aparece antes da primeira varredura, e é a primeira coisa
@@ -127,9 +120,9 @@ function Mono({ children, dim }) {
 function Empty({ icon: Icon = Inbox, title, hint, action }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16">
-      <Icon size={28} style={{ color: C.faint }} />
-      <p className="text-sm" style={{ ...sans, color: C.dim }}>{title}</p>
-      {hint && <p className="text-xs text-center" style={{ ...sans, color: C.faint, maxWidth: 380 }}>{hint}</p>}
+      <Icon size={28} style={{ color: T.faint }} />
+      <p className="text-sm" style={{ ...sans, color: T.dim }}>{title}</p>
+      {hint && <p className="text-xs text-center" style={{ ...sans, color: T.faint, maxWidth: 380 }}>{hint}</p>}
       {action}
     </div>
   );
@@ -149,7 +142,7 @@ function Devices({ devices, onOpen, scanning, onScan }) {
           hint="Rode a primeira varredura para preencher o inventário."
           action={
             <button onClick={() => onScan()} className="rounded-md px-3.5 h-9 text-sm font-medium mt-1"
-              style={{ ...sans, background: C.cyan, color: "#06090F" }}>Escanear rede</button>
+              style={{ ...sans, background: T.accent, color: T.onAccent }}>Escanear rede</button>
           } />
       </Panel>
     );
@@ -167,73 +160,75 @@ function Devices({ devices, onOpen, scanning, onScan }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 rounded-md px-3 h-9 flex-1"
-          style={{ background: C.panel, border: `1px solid ${C.line}` }}>
-          <Search size={14} style={{ color: C.faint }} />
+          style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+          <Search size={14} style={{ color: T.faint }} />
           <input value={q} onChange={(e) => setQ(e.target.value)}
             placeholder="Filtrar por nome, IP, MAC ou fabricante"
-            className="bg-transparent outline-none flex-1 text-sm" style={{ ...sans, color: C.text }} />
+            className="bg-transparent outline-none flex-1 text-sm" style={{ ...sans, color: T.text }} />
         </div>
-        <div className="flex gap-1 rounded-md p-1" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+        <div className="flex gap-1 rounded-md p-1" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
           {kinds.map((k) => (
             <button key={k} onClick={() => setKind(k)} className="px-2.5 h-7 rounded text-xs"
-              style={{ ...sans, background: kind === k ? C.raised : "transparent", color: kind === k ? C.text : C.faint }}>
+              style={{ ...sans, background: kind === k ? T.raised : "transparent", color: kind === k ? T.text : T.faint }}>
               {k === "all" ? "Todos" : KIND_LABEL[k] || k}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="rounded-lg overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+      <div className="rounded-lg overflow-hidden" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
         <div className="grid px-4 h-9 items-center text-xs"
-          style={{ ...sans, color: C.faint, borderBottom: `1px solid ${C.lineSoft}`, gridTemplateColumns: cols }}>
+          style={{ ...sans, color: T.faint, borderBottom: `1px solid ${T.borderSubtle}`, gridTemplateColumns: cols }}>
           <span>Dispositivo</span><span>Endereço</span><span>MAC</span>
           <span>Sistema</span><span>Portas</span><span>Achados</span><span>Visto</span>
         </div>
 
         {rows.map((d) => {
           const Icon = KIND_ICON[d.kind] || CircleHelp;
-          const sev = d.worstSeverityRank !== null ? BY_RANK[d.worstSeverityRank] : null;
+          const sev = d.worstSeverityRank !== null ? SEVERITY_BY_RANK[d.worstSeverityRank] : null;
           const offline = d.missCount > 0;
           return (
-            <button key={d.id} onClick={() => onOpen(d)}
-              className="w-full grid px-4 h-14 items-center text-left relative"
-              style={{ borderBottom: `1px solid ${C.lineSoft}`, gridTemplateColumns: cols }}>
-              <span className="absolute left-0 top-0 bottom-0" style={{ width: 3, background: sev ? SEV[sev].color : "transparent" }} />
+            <button key={d.id} onClick={() => onOpen(d)} data-row
+              className={`w-full grid px-4 h-14 items-center text-left relative${
+                d.justFound ? " anim-row-enter" : ""
+              }`}
+              style={{ borderBottom: `1px solid ${T.borderSubtle}`, gridTemplateColumns: cols }}>
+              <span className="absolute left-0 top-0 bottom-0" style={{ width: 3, background: sev ? SEVERITY[sev] : "transparent" }} />
               <span className="flex items-center gap-2.5 min-w-0">
-                <Icon size={15} style={{ color: offline ? C.faint : C.dim }} className="shrink-0" />
+                <Icon size={15} style={{ color: offline ? T.faint : T.dim }} className="shrink-0" />
                 <span className="min-w-0">
                   <span className="text-sm block truncate"
-                    style={{ ...sans, color: d.label ? C.text : C.faint, fontStyle: d.label ? "normal" : "italic" }}>
+                    style={{ ...sans, color: d.label ? T.text : T.faint, fontStyle: d.label ? "normal" : "italic" }}>
                     {d.label || "sem nome"}
                   </span>
-                  <span className="text-xs" style={{ ...sans, color: C.faint }}>{KIND_LABEL[d.kind] || d.kind}</span>
+                  <span className="text-xs" style={{ ...sans, color: T.faint }}>{KIND_LABEL[d.kind] || d.kind}</span>
                 </span>
               </span>
               <Mono>{d.ip || "—"}</Mono>
               <span className="min-w-0">
                 <Mono dim>{d.mac || "—"}</Mono>
-                <span className="text-xs block truncate" style={{ ...sans, color: C.faint }}>{d.vendor || ""}</span>
+                <span className="text-xs block truncate" style={{ ...sans, color: T.faint }}>{d.vendor || ""}</span>
               </span>
-              <span className="text-sm truncate" style={{ ...sans, color: C.dim }}>{d.osGuess || "—"}</span>
+              <span className="text-sm truncate" style={{ ...sans, color: T.dim }}>{d.osGuess || "—"}</span>
               <Mono dim>{d.openPorts}</Mono>
-              <span>{sev ? <SevTag sev={sev} /> : <span className="text-xs" style={{ ...sans, color: C.faint }}>—</span>}</span>
+              <span>{sev ? <SevTag sev={sev} /> : <span className="text-xs" style={{ ...sans, color: T.faint }}>—</span>}</span>
               <span className="flex items-center gap-1.5">
-                <span className="rounded-full" style={{ width: 6, height: 6, background: offline ? C.faint : C.ok }} />
-                <span className="text-xs" style={{ ...sans, color: offline ? C.faint : C.dim }}>{ago(d.lastSeen)}</span>
+                <span className="rounded-full" style={{ width: 6, height: 6, background: offline ? T.faint : T.ok }} />
+                <span className="text-xs" style={{ ...sans, color: offline ? T.faint : T.dim }}>{ago(d.lastSeen)}</span>
               </span>
             </button>
           );
         })}
 
         {scanning && (
-          <div className="flex items-center gap-2.5 px-4 h-14" style={{ color: C.cyan }}>
+          <div className="flex items-center gap-2.5 px-4 h-14" style={{ color: T.accent }}>
             <Radar size={15} className="animate-spin" style={{ animationDuration: "2.5s" }} />
             <span className="text-sm" style={{ ...sans }}>Procurando mais dispositivos…</span>
           </div>
         )}
         {!scanning && rows.length === 0 && (
           <div className="px-4 py-12 text-center">
-            <p className="text-sm" style={{ ...sans, color: C.dim }}>Nenhum dispositivo corresponde ao filtro.</p>
+            <p className="text-sm" style={{ ...sans, color: T.dim }}>Nenhum dispositivo corresponde ao filtro.</p>
           </div>
         )}
       </div>
@@ -266,18 +261,18 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
 
   return (
     <div className="flex flex-col gap-4">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm self-start" style={{ ...sans, color: C.cyan }}>
+      <button onClick={onBack} className="flex items-center gap-1 text-sm self-start" style={{ ...sans, color: T.accent }}>
         <ChevronRight size={14} className="rotate-180" /> Dispositivos
       </button>
 
-      <div className="rounded-lg p-5" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+      <div className="rounded-lg p-5" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
         <div className="flex items-start gap-4">
-          <div className="rounded-md p-2.5" style={{ background: C.raised }}>
-            <Icon size={22} style={{ color: C.cyan }} />
+          <div className="rounded-md p-2.5" style={{ background: T.raised }}>
+            <Icon size={22} style={{ color: T.accent }} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
-              <h1 style={{ ...sans, color: device.label ? C.text : C.faint, fontSize: 20, fontWeight: 600,
+              <h1 style={{ ...sans, color: device.label ? T.text : T.faint, fontSize: 20, fontWeight: 600,
                 fontStyle: device.label ? "normal" : "italic" }}>
                 {device.label || "Dispositivo sem nome"}
               </h1>
@@ -301,7 +296,7 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
             });
             if (nome) onRename(device.id, nome);
           }} className="rounded-md px-3 h-8 text-sm shrink-0"
-            style={{ ...sans, color: C.text, background: C.raised, border: `1px solid ${C.line}` }}>
+            style={{ ...sans, color: T.text, background: T.raised, border: `1px solid ${T.border}` }}>
             Renomear
           </button>
         </div>
@@ -323,17 +318,17 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
       <div className="flex gap-1">
         {["portas", "achados", "endereços"].map((t) => (
           <button key={t} onClick={() => setTab(t)} className="px-3 h-8 rounded-md text-sm"
-            style={{ ...sans, background: tab === t ? C.panel : "transparent", color: tab === t ? C.text : C.faint,
-              border: `1px solid ${tab === t ? C.line : "transparent"}` }}>
+            style={{ ...sans, background: tab === t ? T.surface : "transparent", color: tab === t ? T.text : T.faint,
+              border: `1px solid ${tab === t ? T.border : "transparent"}` }}>
             {t[0].toUpperCase() + t.slice(1)}
             {t === "achados" && detail?.findings.length > 0 && (
-              <span className="ml-1.5" style={{ ...mono, color: SEV.high.color }}>{detail.findings.length}</span>
+              <span className="ml-1.5" style={{ ...mono, color: SEVERITY.high }}>{detail.findings.length}</span>
             )}
           </button>
         ))}
       </div>
 
-      {err && <Panel><p className="text-sm" style={{ ...sans, color: SEV.high.color }}>{err}</p></Panel>}
+      {err && <Panel><p className="text-sm" style={{ ...sans, color: SEVERITY.high }}>{err}</p></Panel>}
       {!detail && !err && <SkeletonList rows={5} />}
 
       {detail && tab === "portas" && (
@@ -344,7 +339,7 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
           ) : (
             <>
               <div className="grid px-4 h-9 items-center text-xs"
-                style={{ ...sans, color: C.faint, borderBottom: `1px solid ${C.lineSoft}`, gridTemplateColumns: ".4fr .6fr 2fr" }}>
+                style={{ ...sans, color: T.faint, borderBottom: `1px solid ${T.borderSubtle}`, gridTemplateColumns: ".4fr .6fr 2fr" }}>
                 <span>Porta</span><span>Serviço</span><span>Banner</span>
               </div>
               {detail.services.map((p) => (
@@ -360,8 +355,8 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
           {detail.findings.length === 0 ? (
             <Panel>
               <div className="flex items-center gap-2.5 py-6 justify-center">
-                <ShieldCheck size={18} style={{ color: C.ok }} />
-                <span className="text-sm" style={{ ...sans, color: C.dim }}>Nenhum problema encontrado neste dispositivo.</span>
+                <ShieldCheck size={18} style={{ color: T.ok }} />
+                <span className="text-sm" style={{ ...sans, color: T.dim }}>Nenhum problema encontrado neste dispositivo.</span>
               </div>
             </Panel>
           ) : (
@@ -375,22 +370,22 @@ function DeviceDetail({ device, rules, loadDetail, onBack, onRename, onAccept, o
       {detail && tab === "endereços" && (
         <Panel pad={false}>
           <div className="grid px-4 h-9 items-center text-xs"
-            style={{ ...sans, color: C.faint, borderBottom: `1px solid ${C.lineSoft}`, gridTemplateColumns: ".4fr 1fr .6fr" }}>
+            style={{ ...sans, color: T.faint, borderBottom: `1px solid ${T.borderSubtle}`, gridTemplateColumns: ".4fr 1fr .6fr" }}>
             <span>Tipo</span><span>Valor</span><span>Situação</span>
           </div>
           {detail.addresses.map((a, i) => (
             <div key={i} className="grid px-4 h-11 items-center"
-              style={{ borderBottom: `1px solid ${C.lineSoft}`, gridTemplateColumns: ".4fr 1fr .6fr" }}>
-              <span className="text-sm" style={{ ...sans, color: C.dim }}>{a.kind.toUpperCase()}</span>
+              style={{ borderBottom: `1px solid ${T.borderSubtle}`, gridTemplateColumns: ".4fr 1fr .6fr" }}>
+              <span className="text-sm" style={{ ...sans, color: T.dim }}>{a.kind.toUpperCase()}</span>
               <Mono>{a.value}</Mono>
-              <span className="text-xs" style={{ ...sans, color: a.isCurrent ? C.ok : C.faint }}>
+              <span className="text-xs" style={{ ...sans, color: a.isCurrent ? T.ok : T.faint }}>
                 {a.isCurrent ? "atual" : "histórico"}
               </span>
             </div>
           ))}
           <div className="flex items-center gap-3 px-4 h-14">
-            <Clock size={13} style={{ color: C.faint }} />
-            <span className="text-sm" style={{ ...sans, color: C.faint }}>
+            <Clock size={13} style={{ color: T.faint }} />
+            <span className="text-sm" style={{ ...sans, color: T.faint }}>
               Visto pela primeira vez em {dateOf(detail.firstSeen)}
             </span>
           </div>
@@ -439,7 +434,7 @@ function ConnectButton({ hint, ip, onOpenTerminal }) {
     }).catch(() => {});
   };
 
-  const color = warn ? "#FFC94D" : C.cyan;
+  const color = warn ? SEVERITY.medium : T.accent;
   return (
     <button onClick={act} title={hint.warning || hint.command}
       className="text-xs rounded px-2 h-6 inline-flex items-center gap-1"
@@ -458,15 +453,15 @@ function ServiceRow({ svc, ip, onOpenTerminal }) {
   const tls = svc.tlsInfo ? JSON.parse(svc.tlsInfo) : null;
 
   return (
-    <div style={{ borderBottom: `1px solid ${C.lineSoft}` }}>
-      <div className="grid px-4 py-2 items-center"
+    <div style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+      <div data-row className="grid px-4 py-2 items-center"
         style={{ gridTemplateColumns: ".4fr .6fr 1.4fr auto" }}>
         <Mono>{svc.port}</Mono>
-        <span className="text-sm flex items-center gap-1.5" style={{ ...sans, color: C.dim }}>
+        <span className="text-sm flex items-center gap-1.5" style={{ ...sans, color: T.dim }}>
           {svc.serviceName || svc.protocol}
           {tls && (
             <button onClick={() => setOpen(!open)} title="Ver certificado"
-              style={{ color: tls.selfSigned ? "#FFC94D" : C.ok }}>
+              style={{ color: tls.selfSigned ? SEVERITY.medium : T.ok }}>
               <Lock size={11} />
             </button>
           )}
@@ -498,8 +493,8 @@ function ServiceRow({ svc, ip, onOpenTerminal }) {
 function CertField({ label, value, m }) {
   return (
     <>
-      <span className="text-xs" style={{ ...sans, color: C.faint }}>{label}</span>
-      <span className="text-xs truncate" style={{ ...(m ? mono : sans), color: C.dim }}>{value || "—"}</span>
+      <span className="text-xs" style={{ ...sans, color: T.faint }}>{label}</span>
+      <span className="text-xs truncate" style={{ ...(m ? mono : sans), color: T.dim }}>{value || "—"}</span>
     </>
   );
 }
@@ -507,8 +502,8 @@ function CertField({ label, value, m }) {
 function Field({ label, value, sans: isSans }) {
   return (
     <span>
-      <span className="text-xs block" style={{ ...sans, color: C.faint }}>{label}</span>
-      <span style={{ ...(isSans ? sans : mono), color: C.text, fontSize: 13 }}>{value}</span>
+      <span className="text-xs block" style={{ ...sans, color: T.faint }}>{label}</span>
+      <span style={{ ...(isSans ? sans : mono), color: T.text, fontSize: 13 }}>{value}</span>
     </span>
   );
 }
@@ -525,23 +520,24 @@ function FindingCard({ finding, rule, affected, onAccept }) {
   const sev = finding?.severity || r.severity || "info";
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ background: C.panel, border: `1px solid ${C.line}` }}>
+    <div className={`rounded-lg overflow-hidden${sev === "critical" ? " anim-attention" : ""}`}
+      style={{ background: T.surface, border: `1px solid ${T.border}` }}>
       <div className="flex">
-        <span style={{ width: 3, background: SEV[sev].color }} />
+        <span style={{ width: 3, background: SEVERITY[sev] }} />
         <button onClick={() => setOpen(!open)} className="flex-1 flex items-center gap-3 px-4 py-3 text-left">
-          {open ? <ChevronDown size={14} style={{ color: C.faint }} /> : <ChevronRight size={14} style={{ color: C.faint }} />}
+          {open ? <ChevronDown size={14} style={{ color: T.faint }} /> : <ChevronRight size={14} style={{ color: T.faint }} />}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5">
-              <span className="text-sm font-medium" style={{ ...sans, color: C.text }}>{r.title}</span>
+              <span className="text-sm font-medium" style={{ ...sans, color: T.text }}>{r.title}</span>
               <Mono dim>{finding?.ruleId}</Mono>
             </div>
             {affected && (
-              <p className="text-xs mt-1" style={{ ...sans, color: C.faint }}>
+              <p className="text-xs mt-1" style={{ ...sans, color: T.faint }}>
                 {affected.length} dispositivo{affected.length > 1 ? "s" : ""} afetado{affected.length > 1 ? "s" : ""}
               </p>
             )}
             {!affected && finding?.evidence && (
-              <p className="text-xs mt-1 truncate" style={{ ...mono, color: C.faint }}>{finding.evidence}</p>
+              <p className="text-xs mt-1 truncate" style={{ ...mono, color: T.faint }}>{finding.evidence}</p>
             )}
           </div>
           <ConfTag conf={finding?.confidence || r.confidence} />
@@ -553,23 +549,23 @@ function FindingCard({ finding, rule, affected, onAccept }) {
         <div className="px-4 pb-4 pt-1 flex flex-col gap-4" style={{ paddingLeft: 37 }}>
           {r.why && (
             <div>
-              <p className="text-xs mb-1.5" style={{ ...sans, color: C.faint }}>Por que isso importa</p>
-              <p className="text-sm leading-relaxed" style={{ ...sans, color: C.dim, maxWidth: "72ch" }}>{r.why}</p>
+              <p className="text-xs mb-1.5" style={{ ...sans, color: T.faint }}>Por que isso importa</p>
+              <p className="text-sm leading-relaxed" style={{ ...sans, color: T.dim, maxWidth: "72ch" }}>{r.why}</p>
             </div>
           )}
           {r.fix && (
             <div>
-              <p className="text-xs mb-1.5" style={{ ...sans, color: C.faint }}>Como corrigir</p>
-              <p className="text-sm leading-relaxed" style={{ ...sans, color: C.dim, maxWidth: "72ch" }}>{r.fix}</p>
+              <p className="text-xs mb-1.5" style={{ ...sans, color: T.faint }}>Como corrigir</p>
+              <p className="text-sm leading-relaxed" style={{ ...sans, color: T.dim, maxWidth: "72ch" }}>{r.fix}</p>
             </div>
           )}
           {affected && (
             <div>
-              <p className="text-xs mb-1.5" style={{ ...sans, color: C.faint }}>Afetados</p>
+              <p className="text-xs mb-1.5" style={{ ...sans, color: T.faint }}>Afetados</p>
               <div className="flex flex-wrap gap-2">
                 {affected.map((f) => (
                   <span key={f.id} className="rounded px-2 py-1 text-xs"
-                    style={{ ...mono, background: C.raised, color: C.dim, border: `1px solid ${C.line}` }}>
+                    style={{ ...mono, background: T.raised, color: T.dim, border: `1px solid ${T.border}` }}>
                     {f.deviceIp || f.deviceId.slice(0, 8)}{f.scope ? ` · ${f.scope}` : ""}
                   </span>
                 ))}
@@ -589,7 +585,7 @@ function FindingCard({ finding, rule, affected, onAccept }) {
                 });
                 if (motivo) onAccept(finding.id, motivo);
               }} className="inline-flex items-center gap-1.5 rounded-md px-2.5 h-8 text-sm"
-                style={{ ...sans, background: C.raised, color: C.dim, border: `1px solid ${C.line}` }}>
+                style={{ ...sans, background: T.raised, color: T.dim, border: `1px solid ${T.border}` }}>
                 <EyeOff size={13} /> Aceitar risco
               </button>
             </div>
@@ -615,12 +611,12 @@ function Findings({ findings, rules, onAccept }) {
   const byRule = {};
   findings.forEach((f) => { (byRule[f.ruleId] ||= []).push(f); });
   const ids = Object.keys(byRule).sort(
-    (a, b) => SEV[byRule[a][0].severity].rank - SEV[byRule[b][0].severity].rank,
+    (a, b) => SEVERITY[byRule[a][0].severity].rank - SEVERITY[byRule[b][0].severity].rank,
   );
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm" style={{ ...sans, color: C.dim }}>
+      <p className="text-sm" style={{ ...sans, color: T.dim }}>
         {ids.length} {ids.length === 1 ? "regra disparou" : "regras dispararam"} em{" "}
         {new Set(findings.map((f) => f.deviceId)).size} dispositivos.
       </p>
@@ -651,33 +647,33 @@ function Changes({ changes, onAck }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm" style={{ ...sans, color: C.dim }}>
+        <p className="text-sm" style={{ ...sans, color: T.dim }}>
           Comparação com o estado da varredura anterior.
         </p>
-        <button onClick={() => setShowAck(!showAck)} className="text-sm" style={{ ...sans, color: C.cyan }}>
+        <button onClick={() => setShowAck(!showAck)} className="text-sm" style={{ ...sans, color: T.accent }}>
           {showAck ? "Ocultar já vistas" : "Mostrar já vistas"}
         </button>
       </div>
       <Panel pad={false}>
         {rows.map((c) => (
-          <div key={c.id} className="flex items-center gap-3 px-4 h-16 relative"
-            style={{ borderBottom: `1px solid ${C.lineSoft}`, opacity: c.acknowledged ? 0.5 : 1 }}>
+          <div key={c.id} data-row className="flex items-center gap-3 px-4 h-16 relative"
+            style={{ borderBottom: `1px solid ${T.borderSubtle}`, opacity: c.acknowledged ? 0.5 : 1 }}>
             <span className="absolute left-0 top-0 bottom-0"
-              style={{ width: 3, background: c.acknowledged ? "transparent" : SEV[c.severity].color }} />
+              style={{ width: 3, background: c.acknowledged ? "transparent" : SEVERITY[c.severity] }} />
             <SevDot sev={c.severity} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm" style={{ ...sans, color: C.text }}>{CHANGE_LABEL[c.changeType] || c.changeType}</span>
+                <span className="text-sm" style={{ ...sans, color: T.text }}>{CHANGE_LABEL[c.changeType] || c.changeType}</span>
                 <Mono dim>{c.deviceIp || c.deviceLabel || ""}</Mono>
               </div>
-              <p className="text-xs mt-0.5 truncate" style={{ ...mono, color: C.faint }}>
+              <p className="text-xs mt-0.5 truncate" style={{ ...mono, color: T.faint }}>
                 {c.before ? `${c.before} → ${c.after || "—"}` : c.after || ""}
               </p>
             </div>
-            <span className="text-xs shrink-0" style={{ ...sans, color: C.faint }}>{ago(c.detectedAt)}</span>
+            <span className="text-xs shrink-0" style={{ ...sans, color: T.faint }}>{ago(c.detectedAt)}</span>
             {!c.acknowledged && (
               <button onClick={() => onAck(c.id)} className="rounded-md px-2.5 h-7 text-xs shrink-0"
-                style={{ ...sans, background: C.raised, color: C.dim, border: `1px solid ${C.line}` }}>
+                style={{ ...sans, background: T.raised, color: T.dim, border: `1px solid ${T.border}` }}>
                 Marcar como vista
               </button>
             )}
@@ -698,43 +694,43 @@ function ExportResult({ data, onClose }) {
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center"
-      style={{ background: "#00000088" }} onClick={onClose}>
+      style={{ background: T.overlay }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
-        className="rounded-lg p-5" style={{ background: C.panel, border: `1px solid ${C.line}`, width: 560 }}>
+        className="rounded-lg p-5" style={{ background: T.surface, border: `1px solid ${T.border}`, width: 560 }}>
         {err ? (
           <>
             <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={18} style={{ color: SEV.critical.color }} />
-              <span className="text-sm font-medium" style={{ ...sans, color: C.text }}>Falha ao exportar</span>
+              <AlertTriangle size={18} style={{ color: SEVERITY.critical }} />
+              <span className="text-sm font-medium" style={{ ...sans, color: T.text }}>Falha ao exportar</span>
             </div>
-            <p className="text-sm" style={{ ...sans, color: C.dim }}>{err}</p>
+            <p className="text-sm" style={{ ...sans, color: T.dim }}>{err}</p>
           </>
         ) : (
           <>
             <div className="flex items-center gap-2 mb-3">
-              <ShieldCheck size={18} style={{ color: C.ok }} />
-              <span className="text-sm font-medium" style={{ ...sans, color: C.text }}>Evidência exportada</span>
+              <ShieldCheck size={18} style={{ color: T.ok }} />
+              <span className="text-sm font-medium" style={{ ...sans, color: T.text }}>Evidência exportada</span>
             </div>
-            <p className="text-sm mb-3" style={{ ...sans, color: C.dim }}>
+            <p className="text-sm mb-3" style={{ ...sans, color: T.dim }}>
               {data.deviceCount} dispositivos e {data.findingCount} achados, com selo de integridade.
             </p>
-            <div className="rounded-md p-3 mb-3" style={{ background: C.raised, border: `1px solid ${C.line}` }}>
+            <div className="rounded-md p-3 mb-3" style={{ background: T.raised, border: `1px solid ${T.border}` }}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs" style={{ ...sans, color: C.faint }}>Selo SHA-256 do manifesto</span>
+                <span className="text-xs" style={{ ...sans, color: T.faint }}>Selo SHA-256 do manifesto</span>
                 <button onClick={() => {
                   navigator.clipboard?.writeText(data.hash);
                   setCopied(true); window.setTimeout(() => setCopied(false), 1400);
-                }} className="text-xs inline-flex items-center gap-1" style={{ ...sans, color: C.cyan }}>
+                }} className="text-xs inline-flex items-center gap-1" style={{ ...sans, color: T.accent }}>
                   {copied ? <>Copiado <Check size={11} /></> : <>Copiar <Copy size={11} /></>}
                 </button>
               </div>
-              <p style={{ ...mono, color: C.ok, fontSize: 11, wordBreak: "break-all" }}>{data.hash}</p>
+              <p style={{ ...mono, color: T.ok, fontSize: 11, wordBreak: "break-all" }}>{data.hash}</p>
             </div>
-            <div className="flex flex-col gap-1 text-xs" style={{ ...mono, color: C.faint }}>
+            <div className="flex flex-col gap-1 text-xs" style={{ ...mono, color: T.faint }}>
               <span>{data.manifestPath}</span>
               <span>{data.reportPath}</span>
             </div>
-            <p className="text-xs mt-3 leading-relaxed" style={{ ...sans, color: C.faint, maxWidth: "64ch" }}>
+            <p className="text-xs mt-3 leading-relaxed" style={{ ...sans, color: T.faint, maxWidth: "64ch" }}>
               O arquivo .json é a evidência verificável; qualquer alteração muda o selo. O .html é o
               relatório legível — abra no navegador e use Imprimir para gerar um PDF.
             </p>
@@ -742,12 +738,58 @@ function ExportResult({ data, onClose }) {
         )}
         <div className="flex justify-end mt-4">
           <button onClick={onClose} className="rounded-md px-3 h-8 text-sm"
-            style={{ ...sans, background: C.raised, color: C.text, border: `1px solid ${C.line}` }}>
+            style={{ ...sans, background: T.raised, color: T.text, border: `1px solid ${T.border}` }}>
             Fechar
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Seletor de tema, com amostra da paleta de cada um. */
+function ThemePicker() {
+  const { theme, setTheme, themes } = useTheme();
+
+  return (
+    <Panel title="Aparência">
+      <div className="grid grid-cols-2 gap-2">
+        {themes.map((t) => {
+          const ativo = t.id === theme;
+          return (
+            <button key={t.id} onClick={() => setTheme(t.id)}
+              className="flex items-start gap-3 rounded-md p-3 text-left"
+              style={{
+                background: ativo ? T.raised : "transparent",
+                border: `1px solid ${ativo ? T.accent : T.border}`,
+              }}>
+              {/* Amostra: fundo, destaque, secundária e sucesso. Quatro cores
+                  bastam para reconhecer a paleta sem aplicá-la. */}
+              <span className="flex rounded overflow-hidden shrink-0"
+                style={{ border: `1px solid ${T.border}`, marginTop: 2 }}>
+                {t.swatch.map((c, i) => (
+                  <span key={i} style={{ width: 12, height: 32, background: c }} />
+                ))}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="text-sm block flex items-center gap-1.5"
+                  style={{ ...sans, color: T.text }}>
+                  {t.name}
+                  {ativo && <Check size={12} style={{ color: T.accent }} />}
+                </span>
+                <span className="text-xs block mt-0.5" style={{ ...sans, color: T.faint }}>
+                  {t.description}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-sm leading-relaxed mt-3" style={{ ...sans, color: T.faint, maxWidth: "70ch" }}>
+        A escolha é salva no banco do aplicativo e sobrevive a reinício. O terminal e os
+        gráficos mudam junto.
+      </p>
+    </Panel>
   );
 }
 
@@ -761,37 +803,41 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
   return (
     <div className="grid grid-cols-2 gap-4 items-start" style={{ maxWidth: 1100 }}>
       <div className="col-span-2">
+        <ThemePicker />
+      </div>
+
+      <div className="col-span-2">
       <Panel title="Interfaces de rede">
         <div className="flex flex-col gap-1">
           {(interfaces || []).filter((i) => !i.isLoopback).map((i) => (
             <button key={i.name} onClick={() => onSelect?.(i.name)}
               className="flex items-center gap-3 px-2 h-11 rounded-md text-left"
-              style={{ background: i.name === iface ? C.raised : "transparent" }}>
+              style={{ background: i.name === iface ? T.raised : "transparent" }}>
               <span className="rounded-full shrink-0"
-                style={{ width: 7, height: 7, background: i.arpCapable ? C.ok : SEV.medium.color }} />
+                style={{ width: 7, height: 7, background: i.arpCapable ? T.ok : SEVERITY.medium }} />
               <span className="flex-1 min-w-0">
-                <span className="text-sm block truncate" style={{ ...sans, color: C.text }}>{i.name}</span>
-                <span className="text-xs" style={{ ...mono, color: C.faint }}>
+                <span className="text-sm block truncate" style={{ ...sans, color: T.text }}>{i.name}</span>
+                <span className="text-xs" style={{ ...mono, color: T.faint }}>
                   {i.address || "sem IPv4"}
                 </span>
               </span>
-              <span className="text-xs shrink-0" style={{ ...sans, color: i.arpCapable ? C.ok : SEV.medium.color }}>
+              <span className="text-xs shrink-0" style={{ ...sans, color: i.arpCapable ? T.ok : SEVERITY.medium }}>
                 {i.arpCapable ? "ARP disponível" : "sem ARP"}
               </span>
               {i.name === iface && (
-                <span className="text-xs shrink-0" style={{ ...sans, color: C.cyan }}>em uso</span>
+                <span className="text-xs shrink-0" style={{ ...sans, color: T.accent }}>em uso</span>
               )}
             </button>
           ))}
           <div className="pt-2">
             <Row label="Faixa a varrer" value={cidr || "—"} />
           </div>
-          <p className="text-sm leading-relaxed pt-1" style={{ ...sans, color: C.faint, maxWidth: "70ch" }}>
+          <p className="text-sm leading-relaxed pt-1" style={{ ...sans, color: T.faint, maxWidth: "70ch" }}>
             Adaptador virtual de VirtualBox, Hyper-V ou WSL aparece nesta lista mas não
             tem canal de enlace, então nunca vai oferecer ARP. Escolha a placa física
             ligada à rede que você quer auditar.
           </p>
-          <p className="text-sm leading-relaxed" style={{ ...sans, color: C.faint, maxWidth: "70ch" }}>
+          <p className="text-sm leading-relaxed" style={{ ...sans, color: T.faint, maxWidth: "70ch" }}>
             O sensor enxerga apenas a VLAN onde está conectado. Outras VLANs precisam de
             uma instância própria ou de leitura via SNMP no roteador.
           </p>
@@ -801,7 +847,7 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
 
       <Panel title="Permissões do sistema"
         action={
-          <button onClick={onRecheck} className="text-xs" style={{ ...sans, color: C.cyan }}>
+          <button onClick={onRecheck} className="text-xs" style={{ ...sans, color: T.accent }}>
             Verificar novamente
           </button>
         }>
@@ -813,9 +859,9 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
             note="Mesma exigência do ARP" />
           {caps?.arpActive && (
             <div className="rounded-md p-3 flex gap-2.5 mt-1"
-              style={{ background: `${C.ok}12`, border: `1px solid ${C.ok}33` }}>
-              <ShieldCheck size={15} style={{ color: C.ok }} className="mt-0.5 shrink-0" />
-              <p className="text-sm leading-relaxed" style={{ ...sans, color: C.dim, maxWidth: "68ch" }}>
+              style={{ background: `${T.ok}12`, border: `1px solid ${T.ok}33` }}>
+              <ShieldCheck size={15} style={{ color: T.ok }} className="mt-0.5 shrink-0" />
+              <p className="text-sm leading-relaxed" style={{ ...sans, color: T.dim, maxWidth: "68ch" }}>
                 Modo completo. A varredura ARP encontra todo dispositivo da rede local,
                 inclusive os que bloqueiam ping e mantêm todas as portas fechadas.
               </p>
@@ -823,9 +869,9 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
           )}
           {caps?.reason && (
             <div className="rounded-md p-3 flex gap-2.5 mt-1"
-              style={{ background: `${SEV.medium.color}12`, border: `1px solid ${SEV.medium.color}33` }}>
-              <AlertTriangle size={15} style={{ color: SEV.medium.color }} className="mt-0.5 shrink-0" />
-              <p className="text-sm leading-relaxed" style={{ ...sans, color: C.dim, maxWidth: "68ch" }}>{caps.reason}</p>
+              style={{ background: `${SEVERITY.medium}12`, border: `1px solid ${SEVERITY.medium}33` }}>
+              <AlertTriangle size={15} style={{ color: SEVERITY.medium }} className="mt-0.5 shrink-0" />
+              <p className="text-sm leading-relaxed" style={{ ...sans, color: T.dim, maxWidth: "68ch" }}>{caps.reason}</p>
             </div>
           )}
         </div>
@@ -835,7 +881,7 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
         <div className="flex flex-col gap-3">
           <Row label="Regras carregadas" value={String(total)} />
           <Row label="Desligadas por padrão" value={String(off)} />
-          <p className="text-sm leading-relaxed pt-1" style={{ ...sans, color: C.faint, maxWidth: "70ch" }}>
+          <p className="text-sm leading-relaxed pt-1" style={{ ...sans, color: T.faint, maxWidth: "70ch" }}>
             As regras desligadas testam credencial padrão. Elas tentam autenticar, o que pode
             bloquear conta em sistema com política de lockout, e por isso exigem consentimento
             explícito por dispositivo.
@@ -845,9 +891,9 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
 
       <Panel title="Segurança da varredura">
         <div className="rounded-md p-3 flex gap-2.5"
-          style={{ background: `${SEV.medium.color}12`, border: `1px solid ${SEV.medium.color}33` }}>
-          <AlertTriangle size={15} style={{ color: SEV.medium.color }} className="mt-0.5 shrink-0" />
-          <p className="text-sm leading-relaxed" style={{ ...sans, color: C.dim, maxWidth: "68ch" }}>
+          style={{ background: `${SEVERITY.medium}12`, border: `1px solid ${SEVERITY.medium}33` }}>
+          <AlertTriangle size={15} style={{ color: SEVERITY.medium }} className="mt-0.5 shrink-0" />
+          <p className="text-sm leading-relaxed" style={{ ...sans, color: T.dim, maxWidth: "68ch" }}>
             Impressoras e equipamento industrial antigo podem travar durante varredura ativa.
             Adicione esses endereços às faixas excluídas antes da primeira execução.
           </p>
@@ -860,7 +906,7 @@ function SettingsView({ caps, iface, cidr, rules, interfaces, onRecheck, onSelec
 function Row({ label, value }) {
   return (
     <div className="flex items-center justify-between h-8">
-      <span className="text-sm" style={{ ...sans, color: C.dim }}>{label}</span>
+      <span className="text-sm" style={{ ...sans, color: T.dim }}>{label}</span>
       <Mono>{value}</Mono>
     </div>
   );
@@ -869,9 +915,9 @@ function Row({ label, value }) {
 function Capability({ on, name, note }) {
   return (
     <div className="flex items-center gap-2.5 h-8">
-      <span className="rounded-full shrink-0" style={{ width: 7, height: 7, background: on ? C.ok : C.faint }} />
-      <span className="text-sm" style={{ ...sans, color: on ? C.text : C.faint }}>{name}</span>
-      <span className="text-xs" style={{ ...sans, color: C.faint }}>· {note}</span>
+      <span className="rounded-full shrink-0" style={{ width: 7, height: 7, background: on ? T.ok : T.faint }} />
+      <span className="text-sm" style={{ ...sans, color: on ? T.text : T.faint }}>{name}</span>
+      <span className="text-xs" style={{ ...sans, color: T.faint }}>· {note}</span>
     </div>
   );
 }
@@ -962,12 +1008,12 @@ export default function App() {
   };
 
   return (
-    <div className="flex" style={{ background: C.app, color: C.text, minHeight: "100vh", ...sans }}>
-      <nav className="w-52 shrink-0 flex flex-col" style={{ background: C.panel, borderRight: `1px solid ${C.line}` }}>
-        <div className="h-14 flex items-center gap-2.5 px-4" style={{ borderBottom: `1px solid ${C.line}` }}>
+    <div className="flex" style={{ background: T.bg, color: T.text, minHeight: "100vh", ...sans }}>
+      <nav className="w-52 shrink-0 flex flex-col" style={{ background: T.surface, borderRight: `1px solid ${T.border}` }}>
+        <div className="h-14 flex items-center gap-2.5 px-4" style={{ borderBottom: `1px solid ${T.border}` }}>
           <span className="rounded flex items-center justify-center"
-            style={{ width: 24, height: 24, background: `linear-gradient(135deg, ${C.cyan}, ${C.purple})` }}>
-            <Radar size={14} color="#06090F" />
+            style={{ width: 24, height: 24, background: `linear-gradient(135deg, ${T.accent}, ${T.accent2})` }}>
+            <Radar size={14} color={T.onAccent} />
           </span>
           <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>SentinelStack</span>
         </div>
@@ -978,21 +1024,21 @@ export default function App() {
             return (
               <button key={n.id} onClick={() => { setView(n.id); setSelected(null); }}
                 className="flex items-center gap-2.5 h-9 px-2.5 rounded-md text-sm relative"
-                style={{ background: active ? C.raised : "transparent", color: active ? C.text : C.dim }}>
-                {active && <span className="absolute left-0 rounded-r" style={{ width: 2, height: 16, background: C.cyan }} />}
-                <n.icon size={15} style={{ color: active ? C.cyan : C.faint }} />
+                style={{ background: active ? T.raised : "transparent", color: active ? T.text : T.dim }}>
+                {active && <span className="absolute left-0 rounded-r" style={{ width: 2, height: 16, background: T.accent }} />}
+                <n.icon size={15} style={{ color: active ? T.accent : T.faint }} />
                 {n.label}
                 {n.id === "changes" && unseenChanges > 0 && (
                   <span className="ml-auto rounded px-1.5 text-xs"
-                    style={{ ...mono, background: `${C.purple}2A`, color: C.purple }}>{unseenChanges}</span>
+                    style={{ ...mono, background: `${T.accent2}2A`, color: T.accent2 }}>{unseenChanges}</span>
                 )}
                 {n.id === "findings" && findings.length > 0 && (
                   <span className="ml-auto rounded px-1.5 text-xs"
-                    style={{ ...mono, background: `${SEV.high.color}2A`, color: SEV.high.color }}>{findings.length}</span>
+                    style={{ ...mono, background: `${SEVERITY.high}2A`, color: SEVERITY.high }}>{findings.length}</span>
                 )}
                 {n.id === "terminal" && term.sessions.length > 0 && (
                   <span className="ml-auto rounded px-1.5 text-xs"
-                    style={{ ...mono, background: `${C.cyan}22`, color: C.cyan }}>{term.sessions.length}</span>
+                    style={{ ...mono, background: `${T.accent}22`, color: T.accent }}>{term.sessions.length}</span>
                 )}
               </button>
             );
@@ -1006,15 +1052,15 @@ export default function App() {
             em Configurações, que é onde se vai procurar por ele. */}
         {caps && !caps.arpActive && (
           <div className="mt-auto p-3">
-            <div className="rounded-md p-2.5" style={{ background: C.raised, border: `1px solid ${SEV.medium.color}44` }}>
+            <div className="rounded-md p-2.5" style={{ background: T.raised, border: `1px solid ${SEVERITY.medium}44` }}>
               <div className="flex items-center gap-1.5">
-                <Unlock size={11} style={{ color: SEV.medium.color }} />
-                <span className="text-xs" style={{ color: SEV.medium.color }}>Modo limitado</span>
+                <Unlock size={11} style={{ color: SEVERITY.medium }} />
+                <span className="text-xs" style={{ color: SEVERITY.medium }}>Modo limitado</span>
               </div>
-              <p className="text-xs mt-1 leading-snug" style={{ color: C.faint }}>
+              <p className="text-xs mt-1 leading-snug" style={{ color: T.faint }}>
                 {caps.reason || "Apenas varredura TCP."}
               </p>
-              <button onClick={recheckCaps} className="text-xs mt-2" style={{ color: C.cyan }}>
+              <button onClick={recheckCaps} className="text-xs mt-2" style={{ color: T.accent }}>
                 Verificar novamente
               </button>
             </div>
@@ -1024,7 +1070,7 @@ export default function App() {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="h-14 shrink-0 flex items-center gap-4 px-6"
-          style={{ borderBottom: `1px solid ${C.line}`, background: C.panel }}>
+          style={{ borderBottom: `1px solid ${T.border}`, background: T.surface }}>
           {/* Seletor, não rótulo. Máquina com VirtualBox, Hyper-V ou WSL tem
               várias interfaces, e só uma delas é a rede que se quer varrer.
               O aviso ao lado de cada uma diz qual consegue ARP. */}
@@ -1035,25 +1081,25 @@ export default function App() {
             className="rounded-md px-2 h-8 text-sm outline-none"
             style={{
               ...mono, fontSize: 13,
-              background: C.raised, color: C.text,
-              border: `1px solid ${C.line}`,
+              background: T.raised, color: T.text,
+              border: `1px solid ${T.border}`,
               opacity: scan.running ? 0.5 : 1,
             }}>
             {interfaces.length === 0 && <option value="">sem interface</option>}
             {interfaces.filter((i) => !i.isLoopback).map((i) => (
-              <option key={i.name} value={i.name} style={{ background: C.panel }}>
+              <option key={i.name} value={i.name} style={{ background: T.surface }}>
                 {i.name} · {i.network || "sem IPv4"}{i.arpCapable ? "" : "  (sem ARP)"}
               </option>
             ))}
           </select>
-          <span className="text-xs" style={{ color: C.faint }}>
+          <span className="text-xs" style={{ color: T.faint }}>
             {scan.running
               ? `${PHASE_LABEL[scan.phase] || "Varrendo"}… ${scan.percent}%`
               : scan.lastResult
                 ? `${scan.lastResult.found} dispositivos · ${scan.lastResult.new} novos`
                 : "Nenhuma varredura nesta sessão"}
           </span>
-          {scan.error && <span className="text-xs" style={{ color: SEV.critical.color }}>{scan.error}</span>}
+          {scan.error && <span className="text-xs" style={{ color: SEVERITY.critical }}>{scan.error}</span>}
 
           {/* Espaçador: empurra os botões para a direita SEMPRE, mesmo quando o
               botão de exportar não aparece (nenhum dispositivo ainda). Sem ele,
@@ -1064,8 +1110,8 @@ export default function App() {
             <button onClick={doExport} disabled={exportState === "working"}
               className="inline-flex items-center gap-1.5 rounded-md px-3 h-9 text-sm"
               style={{
-                ...sans, background: "transparent", color: C.dim,
-                border: `1px solid ${C.line}`,
+                ...sans, background: "transparent", color: T.dim,
+                border: `1px solid ${T.border}`,
               }}
               title="Exportar evidência selada (.json + .html)">
               <ShieldCheck size={14} />
@@ -1076,9 +1122,9 @@ export default function App() {
             disabled={!iface || !cidr}
             className="inline-flex items-center gap-2 rounded-md px-3.5 h-9 text-sm font-medium"
             style={{
-              background: scan.running ? C.raised : C.cyan,
-              color: scan.running ? C.text : "#06090F",
-              border: `1px solid ${scan.running ? C.line : C.cyan}`,
+              background: scan.running ? T.raised : T.accent,
+              color: scan.running ? T.text : T.onAccent,
+              border: `1px solid ${scan.running ? T.border : T.accent}`,
               opacity: !iface || !cidr ? 0.5 : 1,
             }}>
             {scan.running ? <><Square size={13} /> Parar</> : <><Play size={13} /> Escanear rede</>}
@@ -1086,8 +1132,8 @@ export default function App() {
         </header>
 
         {scan.running && (
-          <div style={{ height: 2, background: C.raised }}>
-            <div style={{ height: "100%", width: `${scan.percent}%`, background: C.cyan, transition: "width .35s linear" }} />
+          <div style={{ height: 2, background: T.raised }}>
+            <div style={{ height: "100%", width: `${scan.percent}%`, background: T.accent, transition: "width .35s linear" }} />
           </div>
         )}
 
@@ -1120,6 +1166,13 @@ export default function App() {
             view === "devices" ? <SkeletonDeviceList /> : <SkeletonDashboard />
           ) : (
             <ErrorBoundary scope="esta tela" resetKey={view}>
+            {/* `key={view}` faz o React remontar ao trocar de aba, o que
+                dispara a animação de entrada. Sem a key, o conteúdo trocaria
+                sem transição e a mudança de contexto ficaria abrupta. */}
+            {/* `h-full` é obrigatório aqui: o Mapa e o Terminal usam h-full
+                internamente, e sem altura no wrapper eles colapsam para zero.
+                `key={view}` dispara a animação de entrada ao trocar de aba. */}
+            <div key={view} className="anim-view-enter h-full">
               {view === "overview" && (
                 <Dashboard devices={devices} changes={changes} findings={findings}
                   scan={scan} go={setView} onScan={startScan} />
@@ -1146,6 +1199,7 @@ export default function App() {
                 <SettingsView caps={caps} iface={iface} cidr={cidr} rules={rules}
                   interfaces={interfaces} onRecheck={recheckCaps} onSelect={selectInterface} />
               )}
+            </div>
             </ErrorBoundary>
           )}
           </main>
@@ -1155,10 +1209,10 @@ export default function App() {
               style={{ display: view === "terminal" ? "flex" : "none" }}>
               {term.error && (
                 <div className="flex items-center gap-2 px-3 py-2 shrink-0"
-                  style={{ background: "#FF4D6D12", borderBottom: `1px solid ${SEV.critical.color}44` }}>
-                  <AlertTriangle size={14} style={{ color: SEV.critical.color }} className="shrink-0" />
-                  <span className="text-xs flex-1" style={{ ...sans, color: C.dim }}>{term.error}</span>
-                  <button onClick={term.clearError} className="text-xs" style={{ ...sans, color: C.faint }}>
+                  style={{ background: SEVERITY_SOFT.critical, borderBottom: `1px solid ${SEVERITY.critical}` }}>
+                  <AlertTriangle size={14} style={{ color: SEVERITY.critical }} className="shrink-0" />
+                  <span className="text-xs flex-1" style={{ ...sans, color: T.dim }}>{term.error}</span>
+                  <button onClick={term.clearError} className="text-xs" style={{ ...sans, color: T.faint }}>
                     fechar
                   </button>
                 </div>

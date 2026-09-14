@@ -1,0 +1,134 @@
+/*
+ * ============================================================================
+ *  Tokens de design do SentinelStack
+ *
+ *  FONTE ÚNICA DE VERDADE das cores. Nenhum componente deve declarar cor
+ *  literal: todos referenciam estas variáveis.
+ *
+ *  Antes disto, a paleta existia duplicada em nove arquivos, cada um com sua
+ *  cópia da constante `C`. Trocar uma cor exigia editar nove lugares, e todo
+ *  componente novo trazia sua própria versão — o tema quebrava parcialmente e
+ *  ninguém notava.
+ *
+ *  NOMES SÃO SEMÂNTICOS, não descritivos. `--surface-raised`, não
+ *  `--cinza-escuro`. Isso é o que permite um tema claro existir: no tema
+ *  escuro `--surface` é quase preto, no claro é quase branco, e o componente
+ *  que pede "surface" continua correto nos dois. Se o nome fosse a cor, o
+ *  tema claro precisaria de outro conjunto de nomes.
+ * ============================================================================
+ */
+
+:root,
+[data-theme="cyberpunk"] {
+  /* ---- Superfícies, do fundo para a frente ---------------------------- */
+  --bg: #090c12;              /* fundo da janela */
+  --surface: #0f141d;         /* painéis e cartões */
+  --surface-raised: #161d29;  /* elementos dentro de painéis */
+  --surface-hover: #1b2432;   /* hover de linha e botão */
+  --surface-terminal: #0b0f16;/* fundo do terminal, levemente distinto */
+  --surface-offline: #10151f; /* nó do mapa que não respondeu */
+
+  /* ---- Bordas --------------------------------------------------------- */
+  --border: #222c3c;          /* borda visível */
+  --border-subtle: #19212e;   /* divisória interna, mais discreta */
+
+  /* ---- Texto, por hierarquia ------------------------------------------ */
+  --text: #e8ecf4;            /* conteúdo principal */
+  --text-dim: #9aa5b8;        /* secundário */
+  --text-faint: #6b7688;      /* rótulo, metadado */
+  --text-on-accent: #06090f;  /* texto sobre fundo de destaque */
+
+  /* ---- Destaque e marca ----------------------------------------------- */
+  --accent: #00c2ff;
+  --accent-soft: #00c2ff22;   /* fundo de elemento em destaque */
+  --accent-border: #00c2ff33;
+  --accent-2: #7c3aed;        /* secundária, usada em mudanças e novidade */
+  --accent-2-soft: #7c3aed2a;
+
+  /* ---- Severidade -----------------------------------------------------
+     A escala vive aqui e não nos componentes, para um tema poder ajustá-la
+     sem perder o significado. A ORDEM é fixa: crítica é sempre a mais
+     alarmante do tema. */
+  --sev-critical: #ff4d6d;
+  --sev-high: #ff8a3d;
+  --sev-medium: #ffc94d;
+  --sev-low: #4da8ff;
+  --sev-info: #7d8899;
+  --ok: #35d07f;
+
+  /* Versões suaves, para fundo de aviso. Mantidas como token porque montar
+     `${cor}18` em JavaScript espalhava concatenação de string por toda parte. */
+  --sev-critical-soft: #ff4d6d18;
+  --sev-high-soft: #ff8a3d18;
+  --sev-medium-soft: #ffc94d18;
+  --ok-soft: #35d07f18;
+
+  /* ---- Terminal: as 16 cores ANSI -------------------------------------
+     Vivem aqui para o tema poder ajustá-las junto com o resto. O xterm exige
+     cor LITERAL, então o componente resolve estas variáveis com
+     `resolveColor` antes de montar o tema dele. */
+  --term-bg: #0b0f16;
+  --term-fg: #e8ecf4;
+  --term-cursor: #00c2ff;
+  --term-selection: #00c2ff22;
+  --term-selection-inactive: #00c2ff14;
+  --term-black: #0b0f16;
+  --term-red: #ff4d6d;
+  --term-green: #35d07f;
+  --term-yellow: #ffc94d;
+  --term-blue: #4da8ff;
+  --term-magenta: #7c3aed;
+  --term-cyan: #00c2ff;
+  --term-white: #c9d1de;
+  --term-bright-black: #6b7688;
+  --term-bright-red: #ff7a90;
+  --term-bright-green: #5fe3a1;
+  --term-bright-yellow: #ffd97a;
+  --term-bright-blue: #7cc3ff;
+  --term-bright-magenta: #a47bf5;
+  --term-bright-cyan: #5fd8ff;
+  --term-bright-white: #f2f5fa;
+
+  /* ---- Sombra e sobreposição ------------------------------------------ */
+  --overlay: #00000099;
+  --shadow-modal: 0 16px 48px #000000aa;
+  --shadow-toast: 0 8px 24px #00000055;
+
+  /* ---- Skeleton -------------------------------------------------------- */
+  --skel-base: #161d29;
+  --skel-shine: #1e2735;
+
+  /* ---- Tipografia ------------------------------------------------------ */
+  --font-sans: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, ui-monospace, monospace;
+
+  /* ---- Movimento -------------------------------------------------------
+     Duração e curva como token: garante que toda animação do app tenha o
+     mesmo ritmo, e permite desligar tudo de uma vez em prefers-reduced-motion. */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 280ms;
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* ---- Raio ------------------------------------------------------------ */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-panel: 12px;
+}
+
+/*
+ * Quem pediu menos movimento no sistema recebe menos movimento.
+ *
+ * Não é preferência estética, é acessibilidade: movimento pode causar
+ * desconforto e náusea em pessoas com sensibilidade vestibular. Zerar as
+ * durações desliga toda a animação do app de uma vez, porque todas usam estes
+ * tokens.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+}
